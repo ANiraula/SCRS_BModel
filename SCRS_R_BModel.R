@@ -1,5 +1,5 @@
 ####################################
-# NDPERS Normal Cost/Benefit Model #
+# SCRS Normal Cost/Benefit Model #
 ####################################
 
 rm(list = ls())
@@ -13,6 +13,10 @@ library(profvis)
 
 #### Start the Timing
 #profvis({
+
+### Set Employee type: 
+### General, Teacher, Blend
+employee <- "Blend"
 
 #FileName <- 'NDPERS_BM_Inputs.xlsx'
 FileName <- '/Users/anilniraula/databaseR/SCRS_BM_Inputs.xlsx'
@@ -43,7 +47,8 @@ SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')#Updated* (to RP
 #View(MaleMP)
 MaleMP <- read_excel(FileName, sheet = 'MP-2019_Male') #Updated* (to MP-2019)
 FemaleMP <- read_excel(FileName, sheet = 'MP-2019_Female')#Updated* (to MP-2019)
-SalaryGrowth <- read_excel(FileName, sheet = "Salary Growth")#Updated* (How to combined YOS & AGE increases?)
+#SalaryGrowth <- read_excel(FileName, sheet = "Salary Growth")#Updated* (How to combined YOS & AGE increases?)
+#View(SalaryGrowth)
 ### Addition ###
 SalaryGrowthYOS <- read_excel(FileName, sheet = "Salary Growth YOS")#Added* (to combine YOS & AGE increases)
 
@@ -267,9 +272,10 @@ SalaryData <- expand_grid(Age, YOS) %>%
   arrange(entry_age) %>% 
   left_join(SalaryEntry, by = "entry_age") %>% 
   left_join(SalaryGrowthYOS, by = c("YOS")) %>%
-  left_join(SalaryGrowth, by = c("Age")) %>%
+  #left_join(SalaryGrowth, by = c("Age")) %>%
   ### Additions ###
-  mutate(salary_increase = ifelse(YOS < 3, salary_increase_yos,salary_increase_age))
+  mutate(salary_increase = if(employee == "Blend"){salary_increase_yos_Blend}else if(employee == "Teacher"){
+    salary_increase_yos_Teacher}else{salary_increase_yos_General})
 
 
 #######################################
@@ -291,6 +297,7 @@ SalaryData <- SalaryData %>%
          CumulativeWage = cumFV(ARR, Salary)) %>% 
   ungroup()
 
+#View(SalaryData)
 
 #Survival Probability and Annuity Factor
 #View(MortalityTable)
