@@ -16,6 +16,7 @@ library(profvis)
 
 ### Set Employee type: 
 ### General, Teacher, Blend
+#Blend is weighted by 2021 Teacher vs. Other employee count (88,883 vs. 110,279)
 employee <- "Blend"
 
 #FileName <- 'NDPERS_BM_Inputs.xlsx'
@@ -346,12 +347,13 @@ ReducedFactor <- expand_grid(Age, YOS) %>%
   mutate(AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
          YearsNormRet = AgeNormRet - Age,
          RetType = RetirementType(Age, YOS),
-         RF = ifelse(RetType == "Reduced", 1 - (0.05)*YearsNormRet,
+         RF = ifelse(RetType == "Reduced", 1 - (YOSRed)*YearsNormRet,
                      ifelse(RetType == "No", 0, 1)),
          RF = ifelse(RF <0,0,RF)) %>% 
   rename(RetirementAge = Age) %>% 
   ungroup() 
 
+# View(ReducedFactor)
 # 
 # ReducedFactor <- expand_grid(Age, YOS)
 #   
