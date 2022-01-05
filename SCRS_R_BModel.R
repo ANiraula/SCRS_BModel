@@ -43,7 +43,11 @@ for(i in 1:nrow(model_inputs)){
 }
 
 #Import key data tables
-SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')#Updated* (to RP-2010 General)
+SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')
+#Updated* (to Pub-2010 Safety * Multipliers -> Actives)
+#Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate * Multipliers -> Retirees)
+#Adding* capability to swithc between "Teachers", "General", "Blend" (weighted by 2021 membership)
+
 #View(SurvivalRates)
 #View(MaleMP)
 MaleMP <- read_excel(FileName, sheet = 'MP-2019_Male') #Updated* (to MP-2019)
@@ -140,22 +144,22 @@ mortality <- function(data = MortalityTable,
     left_join(FemaleMP, by = c("Age", "Years")) %>% 
     left_join(MaleMP_ultimate, by = "Age") %>% 
     left_join(FemaleMP_ultimate, by = "Age") %>% 
-    mutate(MaleMP_final = ifelse(Years > max(MaleMP$Years), MP_ultimate_male, MP_male),
-           FemaleMP_final = ifelse(Years > max(FemaleMP$Years),  MP_ultimate_female, MP_female),
+    mutate(MaleMP_final = MP_ultimate_male,
+           FemaleMP_final = MP_ultimate_female,
            entry_age = Age - (Years - YearStart),
            YOS = Age - entry_age) %>% 
     group_by(Age) %>%
     
     #MPcumprod is the cumulative product of (1 - MP rates), starting from 2011. We use it later so make life easy and calculate now
-    mutate(MPcumprod_male = cumprod(1 - MaleMP_final),
+    mutate(MPcumprod_male = cumprod(1 - MaleMP_final*0.8),
            #Started mort. table from 2011 (instead of 2010) 
            #to cumsum over 2011+ & then multiply by 2010 MP-2019
            #removed /(1 - MaleMP_final[Years == 2010])
-           MPcumprod_female = cumprod(1 - FemaleMP_final),
-           mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, PubG_2010_employee_male * ScaleMultipleMaleAct, #Adding adj. facctors
-                              PubG_2010_healthy_retiree_male * ScaleMultipleMaleRet) * MPcumprod_male,
-           mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, PubG_2010_employee_female * ScaleMultipleFemaleAct,
-                                PubG_2010_healthy_retiree_female * ScaleMultipleFemaleRet) * MPcumprod_female,
+           MPcumprod_female = cumprod(1 - FemaleMP_final*0.8),
+           mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, PubS_2010_employee_male_blend, #Adding adj. facctors
+                              SCRS_2020_employee_male_blend * ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)) * MPcumprod_male,
+           mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, PubS_2010_employee_female_blend,
+                                SCRS_2020_employee_female_blend * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)) * MPcumprod_female,
            mort = (mort_male + mort_female)/2) %>% 
     #Recalcualting average
     filter(Years >= 2021, entry_age >= 20) %>% 
@@ -165,7 +169,9 @@ mortality <- function(data = MortalityTable,
   
 }
 
+#View(MortalityTable)
 ##### Mortality Function #####
+
 MortalityTable <- mortality(data = MortalityTable,
                             SurvivalRates = SurvivalRates,
                             MaleMP = MaleMP,
