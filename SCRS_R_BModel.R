@@ -140,6 +140,13 @@ SurvivalRates <- SurvivalRates %>% mutate_all(as.numeric)   #why do we need this
 ##### Mortality Function #####
 ### Automate into a package ###
 
+
+## From SCRS val:
+##Healthy retirees and beneficiaries – The gender-distinct South Carolina Retirees 2020 Mortality Tables. 
+#The rates are projected on a fully generational basis by the 80% of Scale UMP* 
+#to account for future mortality improvements and 
+#adjusted with multipliers* based on plan experience.
+
 mortality <- function(data = MortalityTable,
                       SurvivalRates = SurvivalRates,
                       MaleMP = MaleMP,
@@ -161,11 +168,17 @@ mortality <- function(data = MortalityTable,
     group_by(Age) %>%
     
     #MPcumprod is the cumulative product of (1 - MP rates), starting from 2011. We use it later so make life easy and calculate now
-    mutate(MPcumprod_male = cumprod(1 - MaleMP_final*0.8),
+    mutate(MPcumprod_male = cumprod(1 - MaleMP_final*0.8*
+                                    if(employee == "Blend"){ScaleMultipleMaleBlendRet}
+                                    else if(employee == "Teachers"){ScaleMultipleMaleTeacherRet}
+                                    else{ScaleMultipleMaleGeneralRet}),
            #Started mort. table from 2011 (instead of 2010) 
            #to cumsum over 2011+ & then multiply by 2010 MP-2019
            #removed /(1 - MaleMP_final[Years == 2010])
-           MPcumprod_female = cumprod(1 - FemaleMP_final*0.8),
+           MPcumprod_female = cumprod(1 - FemaleMP_final*0.8*
+                                      if(employee == "Blend"){ScaleMultipleFeMaleBlendRet}
+                                      else if(employee == "Teachers"){ScaleMultipleFeMaleTeacherRet}
+                                      else{ScaleMultipleFeMaleGeneralRet}),
            mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, 
                               if(employee == "Blend"){PubS_2010_employee_male_blend}else if(employee == "Teachers"){PubS_2010_employee_male_teacher}else{PubS_2010_employee_male_general}, #Adding adj. facctors
                               if(employee == "Blend"){SCRS_2020_employee_male_blend * ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
