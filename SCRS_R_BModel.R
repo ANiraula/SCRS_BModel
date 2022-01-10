@@ -86,7 +86,7 @@ RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')#Updated to S
 
 IsRetirementEligible <- function(Age, YOS){
   Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI) |
-                   (YOS + Age >= NormalRetRule) |
+                   (YOS + Age >= NormalRetRule & YOS >= NormalYOSI) |
                    (Age >= ReduceRetAge & YOS >= NormalYOSI), TRUE, FALSE)
   return(Check)
 }
@@ -103,11 +103,14 @@ IsRetirementEligible <- function(Age, YOS){
 
 RetirementType <- function(Age, YOS){
   Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
-                 ifelse((YOS + Age >= NormalRetRule), "Normal With Rule of 90",
+                 ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI), "Normal With Rule of 90",
                         ifelse((Age >= ReduceRetAge & Age < NormalRetAgeI & YOS >= NormalYOSI), "Reduced","No")))
   
   return(Check)
 }
+
+#Age Based: Members retiring after age 60 will have their benefit reduced at the rate of 5% per year for each year of their retirement age precedes age 65.
+#Service Based: 4% per year for each year of creditable service that is less than 28.
 
 #These rates dont change so they're outside the function
 #Transform base mortality rates and mortality improvement rates
@@ -345,8 +348,6 @@ SalaryData <- SalaryData %>%
          CumulativeWage = cumFV(ARR, Salary)) %>% 
   ungroup()
 
-#View(SalaryData)
-
 #Survival Probability and Annuity Factor
 #View(MortalityTable)
 AnnuityF <- function(data = MortalityTable,
@@ -367,6 +368,8 @@ AnnuityF <- function(data = MortalityTable,
 
 AnnFactorData <- AnnuityF(data = MortalityTable,
                           ColaType = "Compound")
+### Implement $500 cap?
+
 
 # AnnFactorData <- MortalityTable %>% 
 #   select(Age, entry_age, mort) %>%
@@ -394,13 +397,13 @@ ReducedFactor <- expand_grid(Age, YOS) %>%
   mutate(AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
          YearsNormRet = AgeNormRet - Age,
          RetType = RetirementType(Age, YOS),
-         RF = ifelse(RetType == "Reduced", 1 - (YOSRed)*YearsNormRet,
+         RF = ifelse(RetType == "Reduced", 1 - (AgeRed)*YearsNormRet,#AgeRet is for Class Three EE
                      ifelse(RetType == "No", 0, 1)),
          RF = ifelse(RF <0,0,RF)) %>% 
   rename(RetirementAge = Age) %>% 
   ungroup() 
 
-# View(ReducedFactor)
+ #View(ReducedFactor)
 # 
 # ReducedFactor <- expand_grid(Age, YOS)
 #   
