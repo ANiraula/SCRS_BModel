@@ -457,6 +457,8 @@ BenefitsTable <- expand_grid(Age, YOS, RetirementAge) %>%
 
 #)
 
+#View(BenefitsTable)
+
 #For a given combination of entry age and termination age, the member is assumed to choose the retirement age that maximizes the PV of future retirement benefits. That value is the "optimum benefit". 
 OptimumBenefit <- BenefitsTable %>% 
   group_by(entry_age, Age) %>% 
@@ -493,13 +495,16 @@ NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry
 #Calculate the aggregate normal cost
 NC_aggregate
 
+#Blend: 10.74%
+#Teachers: 10.71%
+#General: 10.56%
+
 #### End the Timing
 #})
 ################################
 
 ####### DC Account Balance 
 SalaryData2 <- SalaryData %>% 
-  filter(entry_age == HiringAge) %>% 
   select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
   mutate(DC_EEContrib = Salary * DC_EE_cont,
          DC_ERContrib = Salary * DC_ER_cont,
@@ -510,7 +515,6 @@ SalaryData2 <- SalaryData %>%
   mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
 
 
-#View(SalaryData)
 ## Graphing PWealth accrual [ALL ENTRY AGES]
 
 # ggplot(SalaryData, aes(Age,RealPenWealth/1000, group = entry_age, col = as.factor(entry_age)))+
@@ -525,7 +529,7 @@ SalaryData2 <- SalaryData %>%
 
 ######### Graphing SINGLE ENTRY AGE + RETENTION
 
-palette_reason <- list(Orange="#FF6633",
+ palette_reason <- list(Orange="#FF6633",
                        LightOrange="#FF9900",
                        DarkGrey="#333333",
                        LightGrey= "#CCCCCC",
@@ -538,17 +542,18 @@ palette_reason <- list(Orange="#FF6633",
                        Green = "#669900",LightGreen = "#00CC66", Red = "#CC0000",LightRed="#FF0000")
 
 
-colnames(SalaryData2)[13] <- "PVPenWealth"
 e.age <- unique(SalaryData2$entry_age)
 SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
 # #View(SalaryData2)
 #
-SalaryData2 <- SalaryData2 %>% filter(entry_age == 27)
+EntryAge <- 27
+SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
-SalaryData2$PVPenWealth <- as.numeric(SalaryData2$PVPenWealth)
+SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
 y_max <- max(SalaryData2$PVPenWealth)
 
+#View(SalaryData2)
 
 ####
 pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
@@ -564,7 +569,7 @@ pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
                 text = paste0("Age: ", Age,
                               "<br>Members Remaining: ", round(RemainingProb*100,1), "%")), size = 1.25, color = palette_reason$LightBlue, linetype = "dashed")+
   scale_x_continuous(breaks = seq(0, 80, by = 10),labels = function(x) paste0(x),
-                     name = paste0("Age (Entry age at 22 )"), expand = c(0,0)) +
+                     name = paste0("Age (Entry age at ", EntryAge, ")"), expand = c(0,0)) +
 
   scale_y_continuous(breaks = seq(0, 5000, by = 100),limits = c(0, y_max/1000*1.1), labels = function(x) paste0("$",x),
                      sec.axis = sec_axis(~./(y_max/100), breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",
