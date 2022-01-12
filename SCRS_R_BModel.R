@@ -17,7 +17,7 @@ library(profvis)
 #profvis({
 
 ################## Set Employee type: General, Teacher, Blend
-employee <- "General" #"Teachers", "General"
+employee <- "Blend" #"Teachers", "General"
 #Blend is weighted by 2021 Teacher vs. Other employee count (88,883 vs. 110,279)
 ##############################
 
@@ -46,6 +46,7 @@ for(i in 1:nrow(model_inputs)){
 
 #Import key data tables
 SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')
+#View(SurvivalRates)
 #Updated* (to Pub-2010 Safety * Multipliers -> Actives)
 #Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate * Multipliers -> Retirees)
 #Adding* capability to swithc between "Teachers", "General", "Blend" (weighted by 2021 membership)
@@ -578,13 +579,12 @@ SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
 # #View(SalaryData2)
 #
-EntryAge <- 27
+EntryAge <- 22
 SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
 SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
 y_max <- max(SalaryData2$PVPenWealth)
 
-#View(SalaryData2)
 
 ####
 pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
