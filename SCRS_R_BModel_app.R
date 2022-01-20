@@ -13,11 +13,14 @@ library(dplyr)
 library(profvis)
 library(shiny)
 library(plotly)
+library(data.table)
 #setwd(getwd())
 
-
 #FileName <- 'NDPERS_BM_Inputs.xlsx'
-FileName <- '/Users/anilniraula/databaseR/SCRS_BM_Inputs.xlsx'
+library(readxl)
+library(httr)
+url1 <- "https://github.com/ANiraula/SCRS_BModel/blob/main/SCRS_BM_Inputs.xlsx?raw=true"
+GET(url1, write_disk(FileName <- tempfile(fileext = ".xlsx")))
 #FileName <- "https://github.com/ANiraula/NDPERS_BModel/blob/main/NDPERS_BM_Inputs.xlsx?raw=true"
 
 #urlfile="https://github.com/ANiraula/NDPERS_BModel/blob/main/NDPERS_BM_Inputs.xlsx?raw=true"
@@ -134,7 +137,18 @@ MortalityTable <- expand_grid(Age, Years)
 
 SurvivalRates <- SurvivalRates %>% mutate_all(as.numeric)   #why do we need this step?
 
-
+######### Graphing SINGLE ENTRY AGE + RETENTION
+palette_reason <- list(Orange="#FF6633",
+                       LightOrange="#FF9900",
+                       DarkGrey="#333333", 
+                       LightGrey= "#CCCCCC", 
+                       SpaceGrey ="#A69FA1",
+                       DarkBlue="#0066CC", 
+                       GreyBlue= "#6699CC", 
+                       Yellow= "#FFCC33",
+                       LightBlue = "#66B2FF", 
+                       SatBlue = "#3366CC", 
+                       Green = "#669900",LightGreen = "#00CC66", Red = "#CC0000",LightRed="#FF0000")
 
 
 ##########
@@ -151,11 +165,11 @@ ui <- fluidPage(
                  selectInput("e.age", "Entry Age", choices = c(20, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67)),
                  selectInput("ee","Employee Type", choices = c("Teachers", "General", "Blend"), selected = "Teachers"),
                  #sliderInput("interest", "Contribution Interest", min = 0.02, max = 0.08, step = 0.005, value = 0.065),
-                 sliderInput("dr", "Discount Rate", min = 4, max = 8, step = 0.5, value = 7),
-                 sliderInput("cola", "COLA rate", min = 0, max = 3, step = 0.5, value = 0),
-                 sliderInput("mult", "Benefit Multiplier", min = 0.89, max = 2.89, step = 0.10, value = 1.89),
-                 sliderInput("DCreturn", "DC Return Rate",min = 3, max = 8, step = 0.5, value = 5),
-                 sliderInput("DC_EEcontr", "DC EE Contribution", min = 4, max = 15, step = 0.05, value = 7),
+                 sliderInput("dr", "Discount Rate (%)", min = 4, max = 8, step = 0.5, value = 7),
+                 sliderInput("cola", "Cost-of-Living Adjustment (%)", min = 0, max = 3, step = 0.5, value = 1),
+                 sliderInput("mult", "Benefit Multiplier", min = 0.82, max = 2.82, step = 0.10, value = 1.82),
+                 sliderInput("DCreturn", "DC Return Rate (%)",min = 3, max = 8, step = 0.5, value = 5),
+                 sliderInput("DC_EEcontr", "DC EE Contribution (%)", min = 4, max = 15, step = 0.05, value = 7),
     ),
     mainPanel(
       ###Remove error messages
@@ -259,7 +273,8 @@ server <- function(input, output, session){
         group_by(entry_age) %>% 
         mutate(surv = cumprod(1 - lag(mort, default = 0)),
                surv_DR = surv/(1+ARR)^(Age - entry_age),
-               surv_DR_COLA = surv_DR * ifelse(ColaType == "Simple", 1+(COLA * (Age - entry_age)), (1+COLA)^(Age - entry_age)),
+               surv_DR_COLA = surv_DR * if(ColaType == "Compound"){1+(COLA * (Age - entry_age))}
+               else{(1+COLA)^(Age - entry_age)},
                AnnuityFactor = rev(cumsum(rev(surv_DR_COLA)))/surv_DR_COLA) %>% 
         ungroup()
       
@@ -268,7 +283,6 @@ server <- function(input, output, session){
     }
     
     ##############
-    
     
     MortalityTable <- mortality(data = MortalityTable,
                                 SurvivalRates = SurvivalRates,
@@ -315,7 +329,7 @@ server <- function(input, output, session){
     #View(MortalityTable)
     ######################
     ######################
-    
+      
     SeparationRates <- expand_grid(Age, YOS) %>% 
       mutate(entry_age = Age - YOS) %>% 
       filter(entry_age %in% SalaryEntry$entry_age) %>% 
@@ -391,6 +405,7 @@ server <- function(input, output, session){
     #Custom function to calculate cumulative future values
     
     ### Automate into a package ###
+    account <- reactive({
     
     #colnames(SalaryGrowth)[2] <- "YOS"
     #Create a long-form table of Age and YOS and merge with salary data
@@ -406,20 +421,6 @@ server <- function(input, output, session){
         salary_increase_yos_Teacher}else{salary_increase_yos_General})#Using 3 if statements for 3 EE types
     
     #############
-    
-    ######### Graphing SINGLE ENTRY AGE + RETENTION
-    palette_reason <- list(Orange="#FF6633",
-                           LightOrange="#FF9900",
-                           DarkGrey="#333333", 
-                           LightGrey= "#CCCCCC", 
-                           SpaceGrey ="#A69FA1",
-                           DarkBlue="#0066CC", 
-                           GreyBlue= "#6699CC", 
-                           Yellow= "#FFCC33",
-                           LightBlue = "#66B2FF", 
-                           SatBlue = "#3366CC", 
-                           Green = "#669900",LightGreen = "#00CC66", Red = "#CC0000",LightRed="#FF0000")
-    
     
     ##### Mortality Function #####
     ### Automate into a package ###
@@ -462,7 +463,6 @@ server <- function(input, output, session){
     
     #Survival Probability and Annuity Factor
     #View(MortalityTable)
-   
     
     AnnFactorData <- AnnuityF(data = MortalityTable,
                               ColaType = "Compound")
@@ -549,7 +549,6 @@ server <- function(input, output, session){
              PVPenWealth = PenWealth/(1 + ARR)^YOS * SepProb,
              PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb)
     
-    
     #Combine optimal benefit with employee balance and calculate the PV of future benefits and salaries 
     # SalaryData <- SalaryData %>% 
     #   left_join(OptimumBenefit, by = c("Age", "entry_age")) %>% 
@@ -558,7 +557,10 @@ server <- function(input, output, session){
     #          PVPenWealth = PenWealth/(1 + ARR)^YOS * SepProb,
     #          PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb) 
     
+    
+    SalaryData <- SalaryData %>% filter(entry_age == input$e.age & Age < 81)
     ####### DC Account Balance 
+  
     SalaryData2 <- SalaryData %>% 
       #filter(entry_age == HiringAge) %>% 
       select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
@@ -569,23 +571,29 @@ server <- function(input, output, session){
              RealDC_balance = DC_balance/(1 + assum_infl)^YOS) %>% 
       left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
       mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
+    
 
-    
     ######### Graphing SINGLE ENTRY AGE + RETENTION
-    
     
     colnames(SalaryData2)[13] <- "PVPenWealth"
     e.age <- unique(SalaryData2$entry_age)
     SalaryData2 <- data.frame(SalaryData2)
     SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
     # #View(SalaryData2)
-    # 
-    SalaryData2 <- SalaryData2 %>% filter(entry_age == input$e.age)
-    SalaryData2 <- SalaryData2 %>% filter(Age < 81)
+    
+    SalaryData2
+    })
+    
+    SalaryData2 <- data.table(account())
+    
+    
     SalaryData2$PVPenWealth <- as.numeric(SalaryData2$PVPenWealth)
     y_max <- max(SalaryData2$PVPenWealth)
     
     SalaryData2 <- data.frame(SalaryData2)
+    
+
+    #View(SalaryData2$DC_balance)
     
     ####
     pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
@@ -601,7 +609,7 @@ server <- function(input, output, session){
                     text = paste0("Age: ", Age,
                                   "<br>Members Remaining: ", round(RemainingProb*100,1), "%")), size = 1, color = palette_reason$LightBlue, linetype = "dashed")+
       scale_x_continuous(breaks = seq(0, 80, by = 10),labels = function(x) paste0(x),
-                         name = paste0("Age (Entry age at ", 22,")"), expand = c(0,0)) +
+                         name = paste0("Age (Entry age at ", input$e.age,")"), expand = c(0,0)) +
       
       scale_y_continuous(breaks = seq(0, 5000, by = 100),limits = c(0, y_max/1000*1.1), labels = function(x) paste0("$",x),
                          sec.axis = sec_axis(~./(y_max/100), breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",

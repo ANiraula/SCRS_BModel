@@ -1,0 +1,13 @@
+name: PensionBenefitModel_SCRS
+title: PensionBenefitModel_SCRS
+username:
+account: anil-niraula
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5447794
+bundleId: 5490167
+url: https://anil-niraula.shinyapps.io/PensionBenefitModel_SCRS/
+when: 1642706467.23808
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: .RData|README.md|SCRS_BM_Inputs.xlsx|SCRS_BModel.csv|SCRS_R_BModel.R

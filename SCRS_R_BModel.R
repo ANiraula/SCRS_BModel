@@ -558,7 +558,7 @@ SalaryData2 <- SalaryData %>%
 #                      name = "Present Value of Pension Wealth ($Thousands)", expand = c(0,0)) 
 ##################################
 
-
+write_csv(SalaryData2, "SCRS_BModel.csv")
 ######### Graphing SINGLE ENTRY AGE + RETENTION
 
  palette_reason <- list(Orange="#FF6633",
@@ -584,7 +584,6 @@ SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
 SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
 y_max <- max(SalaryData2$PVPenWealth)
-
 
 ####
 pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
