@@ -169,7 +169,8 @@ ui <- fluidPage(
                  sliderInput("cola", "Cost-of-Living Adjustment (%)", min = 0, max = 3, step = 0.5, value = 1),
                  sliderInput("mult", "Benefit Multiplier", min = 0.82, max = 2.82, step = 0.10, value = 1.82),
                  sliderInput("DCreturn", "DC Return Rate (%)",min = 3, max = 8, step = 0.5, value = 5),
-                 sliderInput("DC_EEcontr", "DC EE Contribution (%)", min = 4, max = 15, step = 0.05, value = 7),
+                 sliderInput("DC_EEcontr", "DC EE Contribution (%)", min = 4, max = 15, step = 0.05, value = 9),
+                 sliderInput("DC_ERcontr", "DC ER Contribution (%)", min = 0, max = 11, step = 0.05, value = 5),
     ),
     mainPanel(
       ###Remove error messages
@@ -200,6 +201,7 @@ server <- function(input, output, session){
     ARR <- input$dr/100
     DC_return <- input$DCreturn/100
     DC_EE_cont <- input$DC_EEcontr/100
+    DC_ER_cont <- input$DC_ERcontr/100
     #Interest <- input$interest
     
     #### Start the Timing
