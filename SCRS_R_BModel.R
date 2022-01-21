@@ -579,7 +579,7 @@ SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
 # #View(SalaryData2)
 #
-EntryAge <- 22
+EntryAge <- 32
 SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
 SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
