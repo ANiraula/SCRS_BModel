@@ -613,13 +613,14 @@ server <- function(input, output, session){
       scale_x_continuous(breaks = seq(0, 80, by = 10),labels = function(x) paste0(x),
                          name = paste0("Age (Entry age at ", input$e.age,")"), expand = c(0,0)) +
       
-      scale_y_continuous(breaks = seq(0, 5000, by = 100),limits = c(0, y_max/1000*1.1), labels = function(x) paste0("$",x),
-                         sec.axis = sec_axis(~./(y_max/100), breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",
-                                             labels = function(b) paste0(round(b, 0), "%")), 
+      scale_y_continuous(breaks = seq(0, y_max/1000, by = 100),limits = c(0, y_max/1000*1.1), labels = function(x) paste0("$",x),
+                         sec.axis = ggplot2::sec_axis(~./(y_max/100), 
+                                                      breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",
+                                                      labels = function(b) paste0(round(b, 0), "%")),
                          name = "Present Value of Pension Wealth ($Thousands)", expand = c(0,0)) +
       theme_bw()+
       theme(   #panel.grid.major = element_blank(),
-        #panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
         plot.margin = margin(0.5, 0.5,0.5,0.5, "cm"),
         axis.text.y = element_text(size=11, color = "black"),
         axis.text.y.right = element_text(size=11, color = "black"),
@@ -627,7 +628,23 @@ server <- function(input, output, session){
         axis.text.x = element_text(size=11, color = "black"),
         legend.title = element_text(size = 9, colour = "black", face = "bold"))
     
-    ggplotly(pwealth, tooltip = c("text"))
+    
+    ax2 <- list(
+      overlaying = "y",
+      side = "right",
+      showticklabels = TRUE,
+      range = c(0,110),
+      title = "Percent of Employees Remaining (%)",
+      automargin = T,
+      titlefont = list(size = 15),
+      tickvals = seq(0, 110, by = 25),
+      tickfont = list(size = 15)) # I added this line
+    
+    library(plotly)
+    ggplotly(pwealth, tooltip = c("text")) %>%
+      add_markers(yaxis = "y2") %>% # new line
+      layout(
+        yaxis2 = ax2)
     
   })
   # #Calculate normal cost rate for each entry age
