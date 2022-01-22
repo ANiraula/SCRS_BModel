@@ -624,13 +624,13 @@ ax2 <- list(
   range = c(0,110),
   title = "Percent of Employees Remaining (%)",
   automargin = T,
+  showgrid = FALSE,
   titlefont = list(size = 15),
-  tickvals = seq(0, 110, by = 12),
+  tickvals = seq(0, 110, by = 25),
   tickfont = list(size = 15)) # I added this line
 
 library(plotly)
 ggplotly(pwealth, tooltip = c("text")) %>%
-  add_trace(x = ~Age, y = ~RealDC_balance/1000 , name = "%", yaxis = "y2") %>%
   add_markers(yaxis = "y2") %>% # new line
   layout(
     yaxis2 = ax2)

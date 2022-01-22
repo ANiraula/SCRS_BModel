@@ -636,6 +636,7 @@ server <- function(input, output, session){
       range = c(0,110),
       title = "Percent of Employees Remaining (%)",
       automargin = T,
+      showgrid = FALSE,
       titlefont = list(size = 15),
       tickvals = seq(0, 110, by = 25),
       tickfont = list(size = 15)) # I added this line
