@@ -153,8 +153,10 @@ SurvivalRates <- SurvivalRates %>% mutate_all(as.numeric)   #why do we need this
 #to account for future mortality improvements and 
 #adjusted with multipliers* based on plan experience
 
-#Actives -> Pub20120 & apply multipliers
-#PostRetirement -> MULTIPLIER ALREADY APPLIED.
+#Actives -> use Pub2010 & apply multipliers
+#PostRetirement -> use SCRS table w/ multipliers already applied & smooth out
+#Use Pub2010 for age 90+ & apply multipliers
+#Applying MP-2019 ULT improvement only to Post-retirement rates
 
 mortality <- function(data = MortalityTable,
                       SurvivalRates = SurvivalRates,
@@ -192,14 +194,14 @@ mortality <- function(data = MortalityTable,
                                       ),
            mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, 
                               if(employee == "Blend"){PubG_2010_employee_male_blend*((1.3+1.35)/2)}else if(employee == "Teachers"){PubG_2010_employee_male_teacher*1.3}else{PubG_2010_employee_male_general*1.35}, #Adding adj. factors
-                              if(employee == "Blend"){SCRS_2020_employee_male_blend }#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
+                              (if(employee == "Blend"){SCRS_2020_employee_male_blend }#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
                               else if(employee == "Teachers"){SCRS_2020_employee_male_teacher}# * ScaleMultipleMaleTeacherRet}
-                              else{SCRS_2020_employee_male_general })* MPcumprod_male,#* ScaleMultipleMaleGeneralRet}) 
+                              else{SCRS_2020_employee_male_general })* MPcumprod_male),#* ScaleMultipleMaleGeneralRet}) 
            mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, 
                               if(employee == "Blend"){PubG_2010_employee_female_blend*((1.1+1.35)/2)}else if(employee == "Teachers"){PubG_2010_employee_female_teacher*1.1}else{PubG_2010_employee_female_general*1.35}, #Adding adj. facctors
-                              if(employee == "Blend"){SCRS_2020_employee_female_blend}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
+                              (if(employee == "Blend"){SCRS_2020_employee_female_blend}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
                               else if(employee == "Teachers"){SCRS_2020_employee_female_teacher}# * ScaleMultipleFeMaleTeacherRet}
-                              else{SCRS_2020_employee_female_general}) * MPcumprod_female,# * ScaleMultipleFeMaleGeneralRet}) 
+                              else{SCRS_2020_employee_female_general})* MPcumprod_male),# * ScaleMultipleFeMaleGeneralRet}) 
            mort = (mort_male + mort_female)/2) %>% 
     #Recalcualting average
     filter(Years >= 2021, entry_age >= 20) %>% 
