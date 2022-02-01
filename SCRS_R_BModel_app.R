@@ -101,14 +101,23 @@ IsRetirementEligible <- function(Age, YOS){
 
 RetirementType <- function(Age, YOS){
   Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
-                 ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI), "Normal With Rule of 90",
-                        ifelse((Age >= ReduceRetAge & Age < NormalRetAgeI & YOS >= NormalYOSI), "Reduced","No")))
+                 ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI & Age < NormalRetAgeI), "Normal With Rule of 90",
+                        ifelse((Age >= ReduceRetAge & YOS >= NormalYOSI), "Reduced","No")))
   
   return(Check)
 }
 
 #Age Based: Members retiring after age 60 will have their benefit reduced at the rate of 5% per year for each year of their retirement age precedes age 65.
 #Service Based: 4% per year for each year of creditable service that is less than 28.
+
+cumFV <- function(interest, cashflow){
+  cumvalue <- double(length = length(cashflow))
+  for (i in 2:length(cumvalue)) {
+    cumvalue[i] <- cumvalue[i - 1]*(1 + interest) + cashflow[i - 1]
+  }
+  return(cumvalue)
+}
+
 
 #These rates dont change so they're outside the function
 #Transform base mortality rates and mortality improvement rates
@@ -227,60 +236,40 @@ server <- function(input, output, session){
         group_by(Age) %>%
         
         #MPcumprod is the cumulative product of (1 - MP rates), starting from 2011. We use it later so make life easy and calculate now
-        mutate(MPcumprod_male = cumprod(1 - MaleMP_final*0.8*
-                                          if(employee == "Blend"){ScaleMultipleMaleBlendRet}
-                                        else if(employee == "Teachers"){ScaleMultipleMaleTeacherRet}
-                                        else{ScaleMultipleMaleGeneralRet}),
-               #Started mort. table from 2011 (instead of 2010) 
-               #to cumsum over 2011+ & then multiply by 2010 MP-2019
-               #removed /(1 - MaleMP_final[Years == 2010])
-               MPcumprod_female = cumprod(1 - FemaleMP_final*0.8*
-                                            if(employee == "Blend"){ScaleMultipleFeMaleBlendRet}
-                                          else if(employee == "Teachers"){ScaleMultipleFeMaleTeacherRet}
-                                          else{ScaleMultipleFeMaleGeneralRet}),
-               mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, 
-                                  if(employee == "Blend"){PubS_2010_employee_male_blend}else if(employee == "Teachers"){PubS_2010_employee_male_teacher}else{PubS_2010_employee_male_general}, #Adding adj. facctors
-                                  if(employee == "Blend"){SCRS_2020_employee_male_blend * ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
-                                  else if(employee == "Teachers"){SCRS_2020_employee_male_teacher * ScaleMultipleMaleTeacherRet}
-                                  else{SCRS_2020_employee_male_general * ScaleMultipleMaleGeneralRet}) * MPcumprod_male,
-               mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, 
-                                    if(employee == "Blend"){PubS_2010_employee_female_blend}else if(employee == "Teachers"){PubS_2010_employee_female_teacher}else{PubS_2010_employee_female_general}, #Adding adj. facctors
-                                    if(employee == "Blend"){SCRS_2020_employee_female_blend * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
-                                    else if(employee == "Teachers"){SCRS_2020_employee_female_teacher * ScaleMultipleFeMaleTeacherRet}
-                                    else{SCRS_2020_employee_female_general * ScaleMultipleFeMaleGeneralRet}) * MPcumprod_female,
-               mort = (mort_male + mort_female)/2) %>% 
+        mutate(MPcumprod_male = cumprod(1 - MaleMP_final*0.8
+                                        # if(employee == "Blend"){ScaleMultipleMaleBlendRet}
+                                        #else if(employee == "Teachers"){ScaleMultipleMaleTeacherRet}
+                                        #else{ScaleMultipleMaleGeneralRet}
+        ),
+        #Started mort. table from 2011 (instead of 2010) 
+        #to cumsum over 2011+ & then multiply by 2010 MP-2019
+        #removed /(1 - MaleMP_final[Years == 2010])
+        MPcumprod_female = cumprod(1 - FemaleMP_final*0.8
+                                   #if(employee == "Blend"){ScaleMultipleFeMaleBlendRet}
+                                   #else if(employee == "Teachers"){ScaleMultipleFeMaleTeacherRet}
+                                   #else{ScaleMultipleFeMaleGeneralRet}
+        ),
+        mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, 
+                           if(employee == "Blend"){PubG_2010_employee_male_blend*((1.3+1.35)/2)}
+                           else if(employee == "Teachers"){PubG_2010_employee_male_teacher*1.3}
+                           else{PubG_2010_employee_male_general*1.35}, #Adding adj. factors
+                           (if(employee == "Blend"){SCRS_2020_employee_male_blend }#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
+                            else if(employee == "Teachers"){SCRS_2020_employee_male_teacher}# * ScaleMultipleMaleTeacherRet}
+                            else{SCRS_2020_employee_male_general })* MPcumprod_male),#* ScaleMultipleMaleGeneralRet}) 
+        mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, 
+                             if(employee == "Blend"){PubG_2010_employee_female_blend*((1.1+1.35)/2)}
+                             else if(employee == "Teachers"){PubG_2010_employee_female_teacher*1.1}
+                             else{PubG_2010_employee_female_general*1.35}, #Adding adj. facctors
+                             (if(employee == "Blend"){SCRS_2020_employee_female_blend}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
+                              else if(employee == "Teachers"){SCRS_2020_employee_female_teacher}# * ScaleMultipleFeMaleTeacherRet}
+                              else{SCRS_2020_employee_female_general})* MPcumprod_male),# * ScaleMultipleFeMaleGeneralRet}) 
+        mort = (mort_male + mort_female)/2) %>% 
         #Recalcualting average
         filter(Years >= 2021, entry_age >= 20) %>% 
-        replace(is.na(.), 0) %>%
+        # replace(is.na(.), 0) %>%
         ungroup()
       
       MortalityTable
-      
-    }
-    ##############
-    cumFV <- function(interest, cashflow){
-      cumvalue <- double(length = length(cashflow))
-      for (i in 2:length(cumvalue)) {
-        cumvalue[i] <- cumvalue[i - 1]*(1 + interest) + cashflow[i - 1]
-      }
-      return(cumvalue)
-    }
-    
-    ##############
-    AnnuityF <- function(data = MortalityTable,
-                         ColaType = "Simple"){
-      
-      AnnFactorData <- MortalityTable %>% 
-        select(Age, entry_age, mort) %>%
-        group_by(entry_age) %>% 
-        mutate(surv = cumprod(1 - lag(mort, default = 0)),
-               surv_DR = surv/(1+ARR)^(Age - entry_age),
-               surv_DR_COLA = surv_DR * if(ColaType == "Compound"){1+(COLA * (Age - entry_age))}
-               else{(1+COLA)^(Age - entry_age)},
-               AnnuityFactor = rev(cumsum(rev(surv_DR_COLA)))/surv_DR_COLA) %>% 
-        ungroup()
-      
-      AnnFactorData
       
     }
     
@@ -466,6 +455,22 @@ server <- function(input, output, session){
     #Survival Probability and Annuity Factor
     #View(MortalityTable)
     
+    AnnuityF <- function(data = MortalityTable,
+                         ColaType = "Simple"){
+      
+      AnnFactorData <- MortalityTable %>% 
+        select(Age, entry_age, mort) %>%
+        group_by(entry_age) %>% 
+        mutate(surv = cumprod(1 - lag(mort, default = 0)),
+               surv_DR = surv/(1+ARR)^(Age - entry_age),
+               surv_DR_COLA = surv_DR * ifelse(ColaType == "Simple", 1+(COLA * (Age - entry_age)), (1+COLA)^(Age - entry_age)),
+               AnnuityFactor = rev(cumsum(rev(surv_DR_COLA)))/surv_DR_COLA) %>% 
+        ungroup()
+      
+      AnnFactorData
+      
+    }
+    
     AnnFactorData <- AnnuityF(data = MortalityTable,
                               ColaType = "Compound")
     
@@ -491,14 +496,15 @@ server <- function(input, output, session){
     ReducedFactor <- expand_grid(Age, YOS) %>% 
       arrange(YOS) %>% 
       mutate(norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
-             first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)) %>% 
+             first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
+      ) %>% #remove
       group_by(YOS) %>% 
-      mutate(AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
-             YearsNormRet = AgeNormRet - Age,
-             RetType = RetirementType(Age, YOS),
-             RF = ifelse(RetType == "Reduced", 1 - (AgeRed)*YearsNormRet,#AgeRet is for Class Three EE
-                         ifelse(RetType == "No", 0, 1)),
-             RF = ifelse(RF <0,0,RF)) %>% 
+      mutate(#AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
+        #YearsNormRet = AgeNormRet - Age,
+        RetType = RetirementType(Age, YOS),
+        RF = ifelse(RetType == "Reduced", 1 - (AgeRed)*(NormalRetAgeI-Age),#AgeRet is for Class Three EE
+                    ifelse(RetType == "No", 0, 1)),
+        RF = ifelse(RF <0,0,RF)) %>% 
       rename(RetirementAge = Age) %>% 
       ungroup() 
     

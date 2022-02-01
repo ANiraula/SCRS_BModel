@@ -17,7 +17,7 @@ library(profvis)
 #profvis({
 
 ################## Set Employee type: General, Teacher, Blend
-employee <- "Blend" #"Teachers", "General"
+employee <- "Teachers" #"Teachers", "General"
 #Blend is weighted by 2021 Teacher vs. Other employee count (88,883 vs. 110,279)
 ##############################
 
@@ -46,9 +46,10 @@ for(i in 1:nrow(model_inputs)){
 
 #Import key data tables
 SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')
-#View(SurvivalRates)
-#Updated* (to Pub-2010 Safety * Multipliers -> Actives)
-#Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate * Multipliers -> Retirees)
+
+#Updated* (to Pub-2010 General & teachers * Multipliers -> Actives)
+#Updated* (to Pub-2010 General & Teachers * Multipliers * 80% * MP-2019 Ultimate -> Retirees Ag 91+)
+#Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate -> Retirees Age < 91)
 #Adding* capability to swithc between "Teachers", "General", "Blend" (weighted by 2021 membership)
 
 #View(SurvivalRates)
@@ -138,7 +139,6 @@ FemaleMP_ultimate <- FemaleMP %>%
 MortalityTable <- expand_grid(Age, Years)
 
 SurvivalRates <- SurvivalRates %>% mutate_all(as.numeric)   #why do we need this step?
-
 ##### Mortality Function #####
 ### Automate into a package ###
 
@@ -194,16 +194,16 @@ mortality <- function(data = MortalityTable,
                               if(employee == "Blend"){PubG_2010_employee_male_blend*((1.3+1.35)/2)}
                               else if(employee == "Teachers"){PubG_2010_employee_male_teacher*1.3}
                               else{PubG_2010_employee_male_general*1.35}, #Adding adj. factors
-                              (if(employee == "Blend"){SCRS_2020_employee_male_blend }#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
-                              else if(employee == "Teachers"){SCRS_2020_employee_male_teacher}# * ScaleMultipleMaleTeacherRet}
-                              else{SCRS_2020_employee_male_general })* MPcumprod_male),#* ScaleMultipleMaleGeneralRet}) 
+                              (if(employee == "Blend"){SCRS_2020_employee_male_blend * ifelse(Age > 90, ScaleMultipleMaleBlendRet, 1)}#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
+                              else if(employee == "Teachers"){SCRS_2020_employee_male_teacher * ifelse(Age > 90, ScaleMultipleMaleTeacherRet, 1)}# * ScaleMultipleMaleTeacherRet}
+                              else{SCRS_2020_employee_male_general * ifelse(Age > 90, ScaleMultipleMaleGeneralRet, 1)}) * MPcumprod_male),#* ScaleMultipleMaleGeneralRet}) 
            mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, 
                               if(employee == "Blend"){PubG_2010_employee_female_blend*((1.1+1.35)/2)}
                               else if(employee == "Teachers"){PubG_2010_employee_female_teacher*1.1}
                               else{PubG_2010_employee_female_general*1.35}, #Adding adj. facctors
-                              (if(employee == "Blend"){SCRS_2020_employee_female_blend}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
-                              else if(employee == "Teachers"){SCRS_2020_employee_female_teacher}# * ScaleMultipleFeMaleTeacherRet}
-                              else{SCRS_2020_employee_female_general})* MPcumprod_male),# * ScaleMultipleFeMaleGeneralRet}) 
+                              (if(employee == "Blend"){SCRS_2020_employee_female_blend * ifelse(Age > 90, ScaleMultipleFeMaleBlendRet, 1)}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
+                              else if(employee == "Teachers"){SCRS_2020_employee_female_teacher * ifelse(Age > 90, ScaleMultipleFeMaleTeacherRet, 1)}# * ScaleMultipleFeMaleTeacherRet}
+                              else{SCRS_2020_employee_female_general * ifelse(Age > 90, ScaleMultipleFeMaleGeneralRet, 1)})* MPcumprod_male),# * ScaleMultipleFeMaleGeneralRet}) 
            mort = (mort_male + mort_female)/2) %>% 
     #Recalcualting average
     filter(Years >= 2021, entry_age >= 20) %>% 
@@ -224,6 +224,7 @@ MortalityTable <- mortality(data = MortalityTable,
                             MaleMP_ultimate = MaleMP_ultimate,
                             FemaleMP_ultimate = FemaleMP_ultimate)
 
+#View(MortalityTable)
 #Join base mortality table with mortality improvement table and calculate the final mortality rates
 # MortalityTable <- MortalityTable %>% 
 #   left_join(SurvivalRates, by = "Age") %>% 
@@ -426,11 +427,11 @@ AnnFactorData <- AnnuityF(data = MortalityTable,
 ReducedFactor <- expand_grid(Age, YOS) %>% 
   arrange(YOS) %>% 
   mutate(norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
-         #first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
+         first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
          ) %>% #remove
   group_by(YOS) %>% 
-  mutate(#AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
-         #YearsNormRet = AgeNormRet - Age,
+  mutate(AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
+         YearsNormRet = AgeNormRet - Age,
          RetType = RetirementType(Age, YOS),
          RF = ifelse(RetType == "Reduced", 1 - (AgeRed)*(NormalRetAgeI-Age),#AgeRet is for Class Three EE
                      ifelse(RetType == "No", 0, 1)),
@@ -533,12 +534,29 @@ NormalCost <- SalaryData %>%
 NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry$count_start)/
   sum(SalaryEntry$start_sal * SalaryEntry$count_start)
 
+########## Normal Cost #######
 #Calculate the aggregate normal cost
-NC_aggregate
 
-#Blend: 11.08%
-#Teachers: 11.11%
+NC_aggregate 
+
+#Blend: 11.10%
+#Teachers: 11.15%
 #General: 10.85%
+
+#####################
+#2021 Val GNC = 10.95%
+#2020 Val GNC = 10.63%
+
+#GNC increased by 3.01%
+#10.95/10.63-1
+
+#Blend: 11.10% (Class 3)
+#10.95/11.10
+#0.9864865 adjustment (Blend to Val GNC)
+
+#2020 Model new hires GNC = 9.33%
+#9.33/11.10
+#Adjustment for New Hires (Class 3) 0.8405405
 
 #### End the Timing
 #})
