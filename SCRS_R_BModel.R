@@ -18,16 +18,18 @@ library(profvis)
 
 ################## Class III --> Set Employee type: General, Teacher, Blend
 employee <- "Blend" #"Teachers", "General"
-tier <- 3# FAS (5 for class 3 / 3 for class 2)
 
 #Blend is weighted by 2021 Teacher vs. Other employee count (88,883 vs. 110,279)
 ##############################
 
 ################## Class II --> Set Employee type: General, Teacher, Blend
 # Class Two hired prior to July 1, 2012.
-#1. FAS: 3 years (not 5) 
-#2. Rule either: 28 YOS or Age 65 w/ 5 YOS
-#3. Diff Retirement rates
+tier <- 2
+#1. FAS: 3 years (5 for CLass III)*
+#2. Rule either: 28 YOS or Age 65 w/ 5 YOS*
+#3. Diff Retirement rates (2 tables & no Rule90) *
+#4. Update "Salary and Headcount"
+
 
 #1. Retirement rates (Age and YOS) - 
 #Withdrawal & Mortality rates stay the same
@@ -83,7 +85,7 @@ SalaryEntry <- read_excel(FileName, sheet = "Salary and Headcount") %>% #Updated
 ##############
 TerminationRateAfter10 <- read_excel(FileName, sheet = 'Termination Rates after 10')#Updated to SCRS*
 TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates before 10')#Updated to SCRS*
-RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')#Updated to SCRS*
+RetirementRates <- read_excel(FileName, sheet = ifelse(tier == 3, 'Retirement Rates', 'Retirement Rates T2'))#Updated to SCRS*
 #View(TerminationRateBefore10)
 #View(RetirementRates)
 
@@ -125,10 +127,13 @@ IsRetirementEligible <- function(Age, YOS, tier = 3){
 #       1. Age 65 w/ 8YOS
 #       2. Rule of 90
 
-RetirementType <- function(Age, YOS){
-  Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
+RetirementType <- function(Age, YOS, tier = 3){
+  Check = if(tier == 3){
+    ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
                  ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI & Age < NormalRetAgeI), "Normal With Rule of 90",
-                        ifelse((Age >= ReduceRetAge & YOS >= NormalYOSI), "Reduced","No")))
+                        ifelse((Age >= ReduceRetAge & YOS >= NormalYOSI), "Reduced","No")))}else
+    {ifelse(Age >= NormalRetAgeII & YOS >= (NormalYOSI-3), "Normal No Rule of 90",
+                ifelse((YOS >= NormalYOSII), "Reduced","No"))}
   
   return(Check)
 }
@@ -564,8 +569,8 @@ NC_aggregate
 #Blend: 11.10%
 #Teachers: 11.15%
 #General: 10.85%
+#Blend Class II/III: 11.10%/10.86%
 
-10.95/11.10
 #####################
 #2021 Val GNC = 10.95%
 #2020 Val GNC = 10.63%
