@@ -230,7 +230,7 @@ mortality <- function(data = MortalityTable,
                               else{PubG_2010_employee_female_general*1.35}, #Adding adj. facctors
                               (if(employee == "Blend"){SCRS_2020_employee_female_blend * ifelse(Age > 90, ScaleMultipleFeMaleBlendRet, 1)}# * ((ScaleMultipleFeMaleTeacherRet+ScaleMultipleFeMaleGeneralRet)/2)}
                               else if(employee == "Teachers"){SCRS_2020_employee_female_teacher * ifelse(Age > 90, ScaleMultipleFeMaleTeacherRet, 1)}# * ScaleMultipleFeMaleTeacherRet}
-                              else{SCRS_2020_employee_female_general * ifelse(Age > 90, ScaleMultipleFeMaleGeneralRet, 1)})* MPcumprod_male),# * ScaleMultipleFeMaleGeneralRet}) 
+                              else{SCRS_2020_employee_female_general * ifelse(Age > 90, ScaleMultipleFeMaleGeneralRet, 1)})* MPcumprod_female),# * ScaleMultipleFeMaleGeneralRet}) 
            mort = (mort_male + mort_female)/2) %>% 
     #Recalcualting average
     filter(Years >= 2021, entry_age >= 20) %>% 
@@ -453,15 +453,15 @@ AnnFactorData <- AnnuityF(data = MortalityTable,
 ########
 ReducedFactor <- expand_grid(Age, YOS) %>% 
   arrange(YOS) %>% 
-  mutate(norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
-         first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
+  mutate(#norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
+         #first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
          ) %>% #remove
   group_by(YOS) %>% 
-  mutate(AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
-         YearsNormRet = AgeNormRet - Age,
+  mutate(#AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
+         #YearsNormRet = AgeNormRet - Age,
          RetType = RetirementType(Age, YOS),
          RF = ifelse(RetType == "Reduced", 1 - (AgeRed)*(NormalRetAgeI-Age),#AgeRet is for Class Three EE
-                     ifelse(RetType == "No", 0, 1)),
+                    ifelse(RetType == "No", 0, 1) ),
          RF = ifelse(RF <0,0,RF)) %>% 
   rename(RetirementAge = Age) %>% 
   ungroup() 
