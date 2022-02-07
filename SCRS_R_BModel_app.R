@@ -180,6 +180,8 @@ ui <- fluidPage(
                  sliderInput("DCreturn", "DC Return Rate (%)",min = 3, max = 8, step = 0.5, value = 5),
                  sliderInput("DC_EEcontr", "DC EE Contribution (%)", min = 4, max = 15, step = 0.05, value = 9),
                  sliderInput("DC_ERcontr", "DC ER Contribution (%)", min = 0, max = 11, step = 0.05, value = 5),
+                 
+             
     ),
     mainPanel(
       ###Remove error messages
@@ -188,7 +190,9 @@ ui <- fluidPage(
                  ".shiny-output-error:before { visibility: hidden; }"
       ),
       
-      plotly::plotlyOutput("plot_pwealth")
+      plotly::plotlyOutput("plot_pwealth"),
+      br(),
+      tags$div(htmlOutput("text1")),
     )
   )
 )
@@ -198,6 +202,21 @@ ui <- fluidPage(
 ######Shiny app[server] -------------------------------------------------
 
 server <- function(input, output, session){
+  
+  
+  
+  output$text1 <- renderText({
+    paste(   "<b>Pension Wealth is based on future stream of payments valued at retirement age (using certain discount rate)", "<br>",
+             "Present Value of benefits = dollar amount of an individual benefit payment", "<br>",
+             "multiplied by P = PMT * [1 – [ (1 / 1+r)^n] / r] where:", "<br>",
+             "P = Present value of your benefit stream", "<br>",
+             "PMT = Dollar amount of each payment", "<br>",
+             "r = Discount or interest rate", "<br>",
+             "n = Number of periods after retirement the payments will be made", "<br>",
+          sep="\n")
+  })
+  
+  
   
   output$plot_pwealth <- plotly::renderPlotly({
     

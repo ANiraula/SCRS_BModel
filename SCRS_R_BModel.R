@@ -16,13 +16,26 @@ library(profvis)
 #### Start the Timing
 #profvis({
 
-################## Set Employee type: General, Teacher, Blend
-employee <- "Teachers" #"Teachers", "General"
+################## Class III --> Set Employee type: General, Teacher, Blend
+employee <- "Blend" #"Teachers", "General"
+tier <- 3# FAS (5 for class 3 / 3 for class 2)
+
 #Blend is weighted by 2021 Teacher vs. Other employee count (88,883 vs. 110,279)
 ##############################
 
+################## Class II --> Set Employee type: General, Teacher, Blend
+# Class Two hired prior to July 1, 2012.
+#1. FAS: 3 years (not 5) 
+#2. Rule either: 28 YOS or Age 65 w/ 5 YOS
+#3. Diff Retirement rates
+
+#1. Retirement rates (Age and YOS) - 
+#Withdrawal & Mortality rates stay the same
+#Age table: Class Two members who attain age 65 before attaining 28 years of service. 
+#YOS: Class Two members who attain 28 years of service before age 65.
+
 #FileName <- 'NDPERS_BM_Inputs.xlsx'
-FileName <- '/Users/anilniraula/databaseR/SCRS_BM_Inputs.xlsx'
+FileName <- '/Users/anilniraula/SCRS_BModel/SCRS_BM_Inputs.xlsx'
 #FileName <- "https://github.com/ANiraula/NDPERS_BModel/blob/main/NDPERS_BM_Inputs.xlsx?raw=true"
 
 #urlfile="https://github.com/ANiraula/NDPERS_BModel/blob/main/NDPERS_BM_Inputs.xlsx?raw=true"
@@ -86,12 +99,21 @@ RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')#Updated to S
 # Main rule: Retirement Eligibility
 ################
 
-IsRetirementEligible <- function(Age, YOS){
-  Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI) |
+IsRetirementEligible <- function(Age, YOS, tier = 3){
+  
+   #Class III new hire rule
+   Check = if(tier == 3){
+   ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI) |
                    (YOS + Age >= NormalRetRule & YOS >= NormalYOSI) |
-                   (Age >= ReduceRetAge & YOS >= NormalYOSI), TRUE, FALSE)
+                   (Age >= ReduceRetAge & YOS >= NormalYOSI), TRUE, FALSE)} else{
+   #CLass II legacy rule
+   ifelse((Age >= NormalRetAgeII & YOS >= (NormalYOSI-3)) |
+                   (YOS >= NormalYOSII), TRUE, FALSE)
+  }
   return(Check)
 }
+####
+
 
 
 ################
@@ -190,14 +212,14 @@ mortality <- function(data = MortalityTable,
                                       #else if(employee == "Teachers"){ScaleMultipleFeMaleTeacherRet}
                                       #else{ScaleMultipleFeMaleGeneralRet}
                                       ),
-           mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, 
+           mort_male = ifelse(IsRetirementEligible(Age, YOS, tier = tier)==F, 
                               if(employee == "Blend"){PubG_2010_employee_male_blend*((1.3+1.35)/2)}
                               else if(employee == "Teachers"){PubG_2010_employee_male_teacher*1.3}
                               else{PubG_2010_employee_male_general*1.35}, #Adding adj. factors
                               (if(employee == "Blend"){SCRS_2020_employee_male_blend * ifelse(Age > 90, ScaleMultipleMaleBlendRet, 1)}#* ((ScaleMultipleMaleTeacherRet+ScaleMultipleMaleGeneralRet)/2)}
                               else if(employee == "Teachers"){SCRS_2020_employee_male_teacher * ifelse(Age > 90, ScaleMultipleMaleTeacherRet, 1)}# * ScaleMultipleMaleTeacherRet}
                               else{SCRS_2020_employee_male_general * ifelse(Age > 90, ScaleMultipleMaleGeneralRet, 1)}) * MPcumprod_male),#* ScaleMultipleMaleGeneralRet}) 
-           mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, 
+           mort_female = ifelse(IsRetirementEligible(Age, YOS, tier = tier)==F, 
                               if(employee == "Blend"){PubG_2010_employee_female_blend*((1.1+1.35)/2)}
                               else if(employee == "Teachers"){PubG_2010_employee_female_teacher*1.1}
                               else{PubG_2010_employee_female_general*1.35}, #Adding adj. facctors
@@ -376,7 +398,7 @@ SalaryData <- SalaryData %>%
   mutate(Salary = start_sal*cumprod(1+lag(salary_increase,default = 0)),
          #Salary = pmin(Salary_gross, salary_cap),
          # IRSSalaryCap = pmin(Salary,IRSCompLimit),
-         FinalAvgSalary = rollmean(lag(Salary), k = FinAvgSalaryYears, fill = NA, align = "right"),
+         FinalAvgSalary = rollmean(lag(Salary), k = ifelse(tier == 3, FinAvgSalaryYears, 3), fill = NA, align = "right"),
          EEContrib = DB_EE_cont*Salary,
          DBEEBalance = cumFV(Interest, EEContrib),
          CumulativeWage = cumFV(ARR, Salary)) %>% 
@@ -543,6 +565,7 @@ NC_aggregate
 #Teachers: 11.15%
 #General: 10.85%
 
+10.95/11.10
 #####################
 #2021 Val GNC = 10.95%
 #2020 Val GNC = 10.63%
