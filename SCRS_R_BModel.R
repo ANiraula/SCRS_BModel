@@ -126,8 +126,6 @@ IsRetirementEligible <- function(Age, YOS, tier = 3){
 }
 ####
 
-
-
 ################
 # New rule: 3 Retirement Types
 ################
@@ -637,7 +635,7 @@ NC_aggregate
 #Blend: 10.86% (Class II: 11.09%)
 #Teachers: 11.16%
 #General: 10.85%
-#Blend Class II/III: 11.10%/10.86%
+#Blend Class II/III: 11.09%/10.86%
 
 #######
 #Class II & III payroll (5,235 & 4,253)
