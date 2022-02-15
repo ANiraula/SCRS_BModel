@@ -642,17 +642,17 @@ NC_aggregate
 #(10.86*5235 + 11.09*4253)/(5235+4253)
 
 #Weighted: 10.96%
-#Val: 10.95%
+#Val: 10.77%
 
 #Adjustment:
-#10.95/10.96
-#0.9990876
+#10.77/10.96
+#0.9826642
 
-#0.9990876*11.09
-#Class II: 11.08%
+#0.9826642*11.09
+#Class II: 10.90%
 
-#0.9990876*10.86
-#Class III: 10.85%
+#0.9826642*10.86
+#Class III: 10.67%
 
 
 #### End the Timing
@@ -702,7 +702,7 @@ SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
 # #View(SalaryData2)
 #
-EntryAge <- 22
+EntryAge <- 27
 SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
 SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)

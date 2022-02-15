@@ -14,6 +14,9 @@ library(profvis)
 library(shiny)
 library(plotly)
 library(data.table)
+library(shiny)
+library(shinyWidgets)
+library(shinymanager)
 #setwd(getwd())
 
 #FileName <- 'NDPERS_BM_Inputs.xlsx'
@@ -44,8 +47,10 @@ for(i in 1:nrow(model_inputs)){
 
 #Import key data tables
 SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')
-#Updated* (to Pub-2010 Safety * Multipliers -> Actives)
-#Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate * Multipliers -> Retirees)
+
+#Updated* (to Pub-2010 General & teachers * Multipliers -> Actives)
+#Updated* (to Pub-2010 General & Teachers * Multipliers * 80% * MP-2019 Ultimate -> Retirees Ag 91+)
+#Updated* (to SCRS Table 2020 * 80% * MP-2019 Ultimate -> Retirees Age < 91)
 #Adding* capability to swithc between "Teachers", "General", "Blend" (weighted by 2021 membership)
 
 #View(SurvivalRates)
@@ -58,37 +63,32 @@ FemaleMP <- read_excel(FileName, sheet = 'MP-2019_Female')#Updated* (to MP-2019)
 SalaryGrowthYOS <- read_excel(FileName, sheet = "Salary Growth YOS")#Updated to SCRS* (YOS)
 #View(SalaryGrowthYOS)
 
-################
-SalaryEntry <- read_excel(FileName, sheet = "Salary and Headcount") %>% #Updated*
-  select(entry_age, start_sal, count_start)#Updated to SCRS*
-#View(SalaryEntry)
 
 ##############
 TerminationRateAfter10 <- read_excel(FileName, sheet = 'Termination Rates after 10')#Updated to SCRS*
 TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates before 10')#Updated to SCRS*
-RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')#Updated to SCRS*
-#View(TerminationRateBefore10)
-#View(RetirementRates)
 
-### Adding scaling factors
-#scale.act.male <- 0.92 
-#scale.ret.male <- 1.03
-#scale.act.female <- 0.92 
-#scale.ret.female <- 1.01 
-#NormalRetRuleAge
-#Function for determining retirement eligibility (including normal retirement, unreduced early retirement, and reduced early retirement)
 
 ################
 # Main rule: Retirement Eligibility
 ################
 
-IsRetirementEligible <- function(Age, YOS){
-  Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI) |
-                   (YOS + Age >= NormalRetRule & YOS >= NormalYOSI) |
-                   (Age >= ReduceRetAge & YOS >= NormalYOSI), TRUE, FALSE)
+IsRetirementEligible <- function(Age, YOS, tier = 3){
+  
+  #Class III new hire rule
+  Check = if(tier == 3){
+    ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI) |
+             (YOS + Age >= NormalRetRule & YOS >= NormalYOSI) |
+             (Age >= ReduceRetAge & YOS >= NormalYOSI), TRUE, FALSE)} else{
+               #CLass II legacy rule
+               ifelse((Age >= NormalRetAgeII & YOS >= (NormalYOSI-3)) |
+                        (YOS >= NormalYOSII) |
+                        (Age >= (ReduceRetAge-5) & YOS >= (NormalYOSII-3)) | 
+                        (Age >= ReduceRetAge), TRUE, FALSE)
+             }
   return(Check)
 }
-
+####
 
 ################
 # New rule: 3 Retirement Types
@@ -99,13 +99,20 @@ IsRetirementEligible <- function(Age, YOS){
 #       1. Age 65 w/ 8YOS
 #       2. Rule of 90
 
-RetirementType <- function(Age, YOS){
-  Check = ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
-                 ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI & Age < NormalRetAgeI), "Normal With Rule of 90",
-                        ifelse((Age >= ReduceRetAge & YOS >= NormalYOSI), "Reduced","No")))
+RetirementType <- function(Age, YOS, tier = 3){
+  Check = if(tier == 3){
+    ifelse((Age >= NormalRetAgeI & YOS >= NormalYOSI), "Normal No Rule of 90",
+           ifelse((YOS + Age >= NormalRetRule & YOS >= NormalYOSI & Age < NormalRetAgeI), "Normal With Rule of 90",
+                  ifelse((Age >= ReduceRetAge & YOS >= NormalYOSI), "Reduced","No")))}
+  #CLass II Legacy
+  else{
+    ifelse(Age >= NormalRetAgeII & YOS >= (NormalYOSI-3), "Normal No Rule of 90", # Means No YOS -> Age 65
+           ifelse(YOS >= NormalYOSII, "Normal With Rule of 90", #Means With 28 YOS before Age 65
+                  ifelse((Age >= (ReduceRetAge-5) & YOS >= (NormalYOSII-3)) | Age >= ReduceRetAge, "Reduced","No")))}
   
   return(Check)
 }
+
 
 #Age Based: Members retiring after age 60 will have their benefit reduced at the rate of 5% per year for each year of their retirement age precedes age 65.
 #Service Based: 4% per year for each year of creditable service that is less than 28.
@@ -173,6 +180,8 @@ ui <- fluidPage(
                  img(src = base64enc::dataURI(file = "https://raw.githubusercontent.com/ReasonFoundation/databaseR/master/apps/reason_logo.png"), width = 200, height = 50),
                  selectInput("e.age", "Entry Age", choices = c(20, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67)),
                  selectInput("ee","Employee Type", choices = c("Teachers", "General", "Blend"), selected = "Teachers"),
+                 radioGroupButtons("tier", "Employee Class", choices = c("New","Legacy"),
+                                   status = "primary"),
                  #sliderInput("interest", "Contribution Interest", min = 0.02, max = 0.08, step = 0.005, value = 0.065),
                  sliderInput("dr", "Discount Rate (%)", min = 4, max = 8, step = 0.5, value = 7),
                  sliderInput("cola", "Cost-of-Living Adjustment (%)", min = 0, max = 3, step = 0.5, value = 1),
@@ -231,6 +240,32 @@ server <- function(input, output, session){
     DC_EE_cont <- input$DC_EEcontr/100
     DC_ER_cont <- input$DC_ERcontr/100
     #Interest <- input$interest
+    
+    
+    tier <- if(input$tier == "Legacy"){2}else{3}
+      
+    ## Adding YOS & Age retirement tables for Class II
+    if(tier == 3){
+      RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')}else{#Updated to SCRS*
+        #Class Two members who attain age 65 before attaining 28 years of service
+        RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates Age')
+        #Class Two members who attain 28 years of service
+        RetirementRates2 <- read_excel(FileName, sheet = 'Retirement Rates YOS')
+      }
+    #View(TerminationRateBefore10)
+    
+    ################
+    SalaryEntry <- read_excel(FileName, sheet = ifelse(tier == 3, "Salary and Headcount", "Salary and Headcount 2")) %>% #Updated*
+      select(entry_age, start_sal, count_start)#Updated to SCRS*
+    #View(SalaryEntry)
+    ### Adding scaling factors
+    #scale.act.male <- 0.92 
+    #scale.ret.male <- 1.03
+    #scale.act.female <- 0.92 
+    #scale.ret.female <- 1.01 
+    #NormalRetRuleAge
+    #Function for determining retirement eligibility (including normal retirement, unreduced early retirement, and reduced early retirement)
+    
     
     #### Start the Timing
     #profvis({
@@ -301,34 +336,7 @@ server <- function(input, output, session){
                                 MaleMP_ultimate = MaleMP_ultimate,
                                 FemaleMP_ultimate = FemaleMP_ultimate)
     
-    #Join base mortality table with mortality improvement table and calculate the final mortality rates
-    # MortalityTable <- MortalityTable %>% 
-    #   left_join(SurvivalRates, by = "Age") %>% 
-    #   left_join(MaleMP, by = c("Age", "Years")) %>% 
-    #   left_join(FemaleMP, by = c("Age", "Years")) %>% 
-    #   left_join(MaleMP_ultimate, by = "Age") %>% 
-    #   left_join(FemaleMP_ultimate, by = "Age") %>% 
-    #   mutate(MaleMP_final = ifelse(Years > max(MaleMP$Years), MP_ultimate_male, MP_male),
-    #          FemaleMP_final = ifelse(Years > max(FemaleMP$Years),  MP_ultimate_female, MP_female),
-    #          entry_age = Age - (Years - YearStart),
-    #          YOS = Age - entry_age) %>% 
-    #   group_by(Age) %>%
-    #   
-    #   #MPcumprod is the cumulative product of (1 - MP rates), starting from 2011. We use it later so make life easy and calculate now
-    #   mutate(MPcumprod_male = cumprod(1 - MaleMP_final),
-    #          #Started mort. table from 2011 (instead of 2010) 
-    #          #to cumsum over 2011+ & then multiply by 2010 MP-2019
-    #          #removed /(1 - MaleMP_final[Years == 2010])
-    #          MPcumprod_female = cumprod(1 - FemaleMP_final),
-    #          mort_male = ifelse(IsRetirementEligible(Age, YOS)==F, PubG_2010_employee_male * ScaleMultipleMaleAct, #Adding adj. facctors
-    #                             PubG_2010_healthy_retiree_male * ScaleMultipleMaleRet) * MPcumprod_male,
-    #          mort_female = ifelse(IsRetirementEligible(Age, YOS)==F, PubG_2010_employee_female * ScaleMultipleFemaleAct,
-    #                               PubG_2010_healthy_retiree_female * ScaleMultipleFemaleRet) * MPcumprod_female,
-    #          mort = (mort_male + mort_female)/2) %>% 
-    #          #Recalcualting average
-    #   filter(Years >= 2021, entry_age >= 20) %>% 
-    #   ungroup()
-    
+   
     #############
     #############
     
@@ -339,7 +347,7 @@ server <- function(input, output, session){
     #View(MortalityTable)
     ######################
     ######################
-      
+    
     SeparationRates <- expand_grid(Age, YOS) %>% 
       mutate(entry_age = Age - YOS) %>% 
       filter(entry_age %in% SalaryEntry$entry_age) %>% 
@@ -357,6 +365,7 @@ server <- function(input, output, session){
     SeparationRates  <- SeparationRates %>% inner_join(x, by = "entry_age")
     SeparationRates  <- SeparationRates %>% select(-first_retire) %>% mutate(YearsFirstRetire = first_ret-Age)
     
+    
     #Separation Rates
     SeparationRates <- SeparationRates %>% 
       left_join(TerminationRateAfter10, by = "YearsFirstRetire") %>% #Joining by new YearsFirstRetire
@@ -364,50 +373,105 @@ server <- function(input, output, session){
       left_join(RetirementRates, by = c("Age")) %>%
       ### Additions ###
       mutate_all(as.numeric) %>% 
-      replace(is.na(.), 0)
+      replace(is.na(.), 0)  
     
+    
+    if(tier == 2){ 
+      SeparationRates <- SeparationRates %>% 
+        left_join(RetirementRates2, by = c("YOS"))%>%
+        ### Additions ###
+        mutate_all(as.numeric) %>% 
+        replace(is.na(.), 0)  
+    } 
+    #View(SeparationRates)
     ######################
     
     #View(SeparationRates %>% select(RetirementType(SeparationRates$Age,SeparationRates$YOS)[1]))
     
     #If you're retirement eligible, use the retirement rates, then checks YOS < 5 and use the regular termination rates
-    SeparationRates <- SeparationRates %>% 
-      mutate(retirement_type = RetirementType(Age,YOS),
-             
-             SepRateMale = ifelse(retirement_type == "Normal With Rule of 90", Rule90,
-                                  ifelse(retirement_type == "Normal No Rule of 90", if(employee == "Blend"){NormalMaleBlend}
-                                         else if(employee == "Teachers"){NormalMaleTeacher}
-                                         else{NormalMaleGeneral},
-                                         ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedMaleBlend}
-                                                else if(employee == "Teachers"){ReducedMaleTeacher}
-                                                else{ReducedMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
-                                                ifelse(YOS < 11, 
-                                                       if(employee == "Blend"){TermBefore10BlendMale}
-                                                       else if(employee == "Teachers"){TermBefore10TeacherMale}
-                                                       else{TermBefore10GeneralMale}, 
-                                                       if(employee == "Blend"){TermAfter10BlendMale}
-                                                       else if(employee == "Teachers"){TermAfter10TeacherMale}
-                                                       else{TermAfter10GeneralMale})))),
-             SepRateFemale = ifelse(retirement_type == "Normal With Rule of 90", Rule90,
-                                    ifelse(retirement_type == "Normal No Rule of 90", if(employee == "Blend"){NormalFeMaleBlend}
-                                           else if(employee == "Teachers"){NormalFeMaleTeacher}
-                                           else{NormalFeMaleGeneral},
-                                           ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedFeMaleBlend}
-                                                  else if(employee == "Teachers"){ReducedFeMaleTeacher}
-                                                  else{ReducedFeMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
-                                                  ifelse(YOS < 11, 
-                                                         if(employee == "Blend"){TermBefore10BlendFeMale}
-                                                         else if(employee == "Teachers"){TermBefore10TeacherFeMale}
-                                                         else{TermBefore10GeneralFeMale}, 
-                                                         if(employee == "Blend"){TermAfter10BlendFeMale}
-                                                         else if(employee == "Teachers"){TermAfter10TeacherFeMale}
-                                                         else{TermAfter10GeneralFeMale})))),
-             SepRate = ((SepRateMale+SepRateFemale)/2)) %>% 
-      group_by(entry_age) %>% 
-      mutate(RemainingProb = cumprod(1 - lag(SepRate, default = 0)),
-             SepProb = lag(RemainingProb, default = 1) - RemainingProb) %>% 
-      ungroup()
     
+    if(tier == 3){
+      ## Class III new hires
+      SeparationRates <- SeparationRates %>% 
+        mutate(retirement_type = RetirementType(Age,YOS),
+               
+               SepRateMale = ifelse(retirement_type == "Normal With Rule of 90", Rule90,
+                                    ifelse(retirement_type == "Normal No Rule of 90", if(employee == "Blend"){NormalMaleBlend}
+                                           else if(employee == "Teachers"){NormalMaleTeacher}
+                                           else{NormalMaleGeneral},
+                                           ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedMaleBlend}
+                                                  else if(employee == "Teachers"){ReducedMaleTeacher}
+                                                  else{ReducedMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
+                                                  ifelse(YOS < 11, 
+                                                         if(employee == "Blend"){TermBefore10BlendMale}
+                                                         else if(employee == "Teachers"){TermBefore10TeacherMale}
+                                                         else{TermBefore10GeneralMale}, 
+                                                         if(employee == "Blend"){TermAfter10BlendMale}
+                                                         else if(employee == "Teachers"){TermAfter10TeacherMale}
+                                                         else{TermAfter10GeneralMale})))),
+               SepRateFemale = ifelse(retirement_type == "Normal With Rule of 90", Rule90,
+                                      ifelse(retirement_type == "Normal No Rule of 90", if(employee == "Blend"){NormalFeMaleBlend}
+                                             else if(employee == "Teachers"){NormalFeMaleTeacher}
+                                             else{NormalFeMaleGeneral},
+                                             ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedFeMaleBlend}
+                                                    else if(employee == "Teachers"){ReducedFeMaleTeacher}
+                                                    else{ReducedFeMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
+                                                    ifelse(YOS < 11, 
+                                                           if(employee == "Blend"){TermBefore10BlendFeMale}
+                                                           else if(employee == "Teachers"){TermBefore10TeacherFeMale}
+                                                           else{TermBefore10GeneralFeMale}, 
+                                                           if(employee == "Blend"){TermAfter10BlendFeMale}
+                                                           else if(employee == "Teachers"){TermAfter10TeacherFeMale}
+                                                           else{TermAfter10GeneralFeMale})))),
+               SepRate = ((SepRateMale+SepRateFemale)/2)) %>% 
+        group_by(entry_age) %>% 
+        mutate(RemainingProb = cumprod(1 - lag(SepRate, default = 0)),
+               SepProb = lag(RemainingProb, default = 1) - RemainingProb) %>% 
+        ungroup()
+      
+      ## Class II legacy
+    }else{
+      SeparationRates <- SeparationRates %>% 
+        mutate(retirement_type = RetirementType(Age,YOS),
+               
+               SepRateMale = ifelse(retirement_type == "Normal No Rule of 90",if(employee == "Blend"){NormalMaleBlend.x}#Age >= 65
+                                    else if(employee == "Teachers"){NormalMaleTeacher.x}
+                                    else{NormalMaleGeneral.x},
+                                    ifelse(retirement_type == "Normal With Rule of 90", if(employee == "Blend"){NormalMaleBlend.y} #YOS >= 28
+                                           else if(employee == "Teachers"){NormalMaleTeacher.y}
+                                           else{NormalMaleGeneral.y},
+                                           ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedMaleBlend}
+                                                  else if(employee == "Teachers"){ReducedMaleTeacher}
+                                                  else{ReducedMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
+                                                  ifelse(YOS < 11, 
+                                                         if(employee == "Blend"){TermBefore10BlendMale}
+                                                         else if(employee == "Teachers"){TermBefore10TeacherMale}
+                                                         else{TermBefore10GeneralMale}, 
+                                                         if(employee == "Blend"){TermAfter10BlendMale}
+                                                         else if(employee == "Teachers"){TermAfter10TeacherMale}
+                                                         else{TermAfter10GeneralMale})))),
+               SepRateFemale = ifelse(retirement_type == "Normal No Rule of 90", if(employee == "Blend"){NormalFeMaleBlend.x}
+                                      else if(employee == "Teachers"){NormalFeMaleTeacher.x}
+                                      else{NormalFeMaleGeneral.x},
+                                      ifelse(retirement_type == "Normal With Rule of 90", if(employee == "Blend"){NormalFeMaleBlend.y}
+                                             else if(employee == "Teachers"){NormalFeMaleTeacher.y}
+                                             else{NormalFeMaleGeneral.y},
+                                             ifelse(retirement_type == "Reduced", if(employee == "Blend"){ReducedFeMaleBlend}
+                                                    else if(employee == "Teachers"){ReducedFeMaleTeacher}
+                                                    else{ReducedFeMaleGeneral},#Using 6 ifelse/if statements for 3 EE & 3 ret. types
+                                                    ifelse(YOS < 11, 
+                                                           if(employee == "Blend"){TermBefore10BlendFeMale}
+                                                           else if(employee == "Teachers"){TermBefore10TeacherFeMale}
+                                                           else{TermBefore10GeneralFeMale}, 
+                                                           if(employee == "Blend"){TermAfter10BlendFeMale}
+                                                           else if(employee == "Teachers"){TermAfter10TeacherFeMale}
+                                                           else{TermAfter10GeneralFeMale})))),
+               SepRate = ((SepRateMale+SepRateFemale)/2)) %>% 
+        group_by(entry_age) %>% 
+        mutate(RemainingProb = cumprod(1 - lag(SepRate, default = 0)),
+               SepProb = lag(RemainingProb, default = 1) - RemainingProb) %>% 
+        ungroup()
+    }
     #Filter out unecessary values
     SeparationRates <- SeparationRates %>% select(Age, YOS, RemainingProb, SepProb)
     
@@ -417,74 +481,52 @@ server <- function(input, output, session){
     ### Automate into a package ###
     account <- reactive({
     
-    #colnames(SalaryGrowth)[2] <- "YOS"
-    #Create a long-form table of Age and YOS and merge with salary data
-    SalaryData <- expand_grid(Age, YOS) %>% 
-      mutate(entry_age = Age - YOS) %>%    #Add entry age
-      filter(entry_age %in% SalaryEntry$entry_age) %>% 
-      arrange(entry_age) %>% 
-      left_join(SalaryEntry, by = "entry_age") %>% 
-      left_join(SalaryGrowthYOS, by = c("YOS")) %>%
-      #left_join(SalaryGrowth, by = c("Age")) %>%
-      ### Additions ###
-      mutate(salary_increase = if(employee == "Blend"){salary_increase_yos_Blend}else if(employee == "Teacher"){
-        salary_increase_yos_Teacher}else{salary_increase_yos_General})#Using 3 if statements for 3 EE types
-    
-    #############
-    
-    ##### Mortality Function #####
-    ### Automate into a package ###
-    
-    #View(SurvivalRates)
-    ########
-    
-    ## From SCRS val:
-    ##Healthy retirees and beneficiaries – The gender-distinct South Carolina Retirees 2020 Mortality Tables. 
-    #The rates are projected on a fully generational basis by the 80% of Scale UMP* 
-    #to account for future mortality improvements and 
-    #adjusted with multipliers* based on plan experience.
-    
-   
-    
-    #View(MortalityTable)
-    ##### Mortality Function #####
-    
-    
-   
-    #######################################
-    #################
-    #################
-    #################
-    #View(SalaryData))
-    #Calculate FAS and cumulative EE contributions
-    #colnames(SalaryData)[7] <- "salary_increase"
-    SalaryData <- SalaryData %>% 
+      SalaryData <- expand_grid(Age, YOS) %>% 
+        mutate(entry_age = Age - YOS) %>%    #Add entry age
+        filter(entry_age %in% SalaryEntry$entry_age) %>% 
+        arrange(entry_age) %>% 
+        left_join(SalaryEntry, by = "entry_age") %>% 
+        left_join(SalaryGrowthYOS, by = c("YOS")) %>%
+        #left_join(SalaryGrowth, by = c("Age")) %>%
+        ### Additions ###
+        mutate(salary_increase = if(employee == "Blend"){salary_increase_yos_Blend}else if(employee == "Teacher"){
+          salary_increase_yos_Teacher}else{salary_increase_yos_General})#Using 3 if statements for 3 EE types
       
-      group_by(entry_age) %>% 
-      mutate(Salary = start_sal*cumprod(1+lag(salary_increase,default = 0)),
-             #Salary = pmin(Salary_gross, salary_cap),
-             # IRSSalaryCap = pmin(Salary,IRSCompLimit),
-             FinalAvgSalary = rollmean(lag(Salary), k = FinAvgSalaryYears, fill = NA, align = "right"),
-             EEContrib = DB_EE_cont*Salary,
-             DBEEBalance = cumFV(Interest, EEContrib),
-             CumulativeWage = cumFV(ARR, Salary)) %>% 
-      ungroup()
-    
-    
-    #Survival Probability and Annuity Factor
-    #View(MortalityTable)
-    
-    AnnuityF <- function(data = MortalityTable,
-                         ColaType = "Simple"){
       
-      AnnFactorData <- MortalityTable %>% 
-        select(Age, entry_age, mort) %>%
+      #######################################
+      #################
+      #################
+      #################
+      
+      #Calculate FAS and cumulative EE contributions
+      #colnames(SalaryData)[7] <- "salary_increase"
+      SalaryData <- SalaryData %>% 
+        
         group_by(entry_age) %>% 
-        mutate(surv = cumprod(1 - lag(mort, default = 0)),
-               surv_DR = surv/(1+ARR)^(Age - entry_age),
-               surv_DR_COLA = surv_DR * ifelse(ColaType == "Simple", 1+(COLA * (Age - entry_age)), (1+COLA)^(Age - entry_age)),
-               AnnuityFactor = rev(cumsum(rev(surv_DR_COLA)))/surv_DR_COLA) %>% 
+        mutate(Salary = start_sal*cumprod(1+lag(salary_increase,default = 0)),
+               #Salary = pmin(Salary_gross, salary_cap),
+               # IRSSalaryCap = pmin(Salary,IRSCompLimit),
+               FinalAvgSalary = rollmean(lag(Salary), k = ifelse(tier == 3, FinAvgSalaryYears, 3), fill = NA, align = "right"),
+               EEContrib = DB_EE_cont*Salary,
+               DBEEBalance = cumFV(Interest, EEContrib),
+               CumulativeWage = cumFV(ARR, Salary)) %>% 
         ungroup()
+      
+      #Survival Probability and Annuity Factor
+      #View(MortalityTable)
+      AnnuityF <- function(data = MortalityTable,
+                           ColaType = "Simple"){
+        
+        AnnFactorData <- MortalityTable %>% 
+          select(Age, entry_age, mort) %>%
+          group_by(entry_age) %>% 
+          mutate(surv = cumprod(1 - lag(mort, default = 0)),
+                 surv_DR = surv/(1+ARR)^(Age - entry_age),
+                 surv_DR_COLA = surv_DR * ifelse(ColaType == "Simple", 1+(COLA * (Age - entry_age)), (1+COLA)^(Age - entry_age)),
+                 AnnuityFactor = rev(cumsum(rev(surv_DR_COLA)))/surv_DR_COLA) %>% 
+          ungroup()
+        
+        AnnFactorData
       
       AnnFactorData
       
@@ -514,7 +556,7 @@ server <- function(input, output, session){
     ########
     ReducedFactor <- expand_grid(Age, YOS) %>% 
       arrange(YOS) %>% 
-      mutate(#norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
+      mutate(norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
         first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
       ) %>% #remove
       group_by(YOS) %>% 
@@ -535,7 +577,41 @@ server <- function(input, output, session){
     ReducedFactor  <- ReducedFactor %>% inner_join(x, by = "YOS")
     ReducedFactor  <- ReducedFactor %>% select(-first_retire) %>% mutate(YearsFirstRetire = first_ret-Age)
     
-    #############
+    # 
+    # ReducedFactor <- expand_grid(Age, YOS)
+    #   
+    # ReducedFactor$FirstRetAge <- ifelse(IsRetirementEligible(ReducedFactor$Age,ReducedFactor$YOS) == T & 
+    #                                       RetirementType(ReducedFactor$Age,ReducedFactor$YOS) == "Reduced",
+    #                                         ReducedFactor$Age,0)
+    # 
+    # ReducedFactor$RetType <- RetirementType(ReducedFactor$Age,ReducedFactor$YOS)
+    # 
+    # 
+    # ReducedFactor$YearsNormRet <- ifelse(ReducedFactor$RetType == "Reduced" & ReducedFactor$Age < 60,
+    #                                 (60- ReducedFactor$Age),
+    #                         ifelse(ReducedFactor$RetType == "Reduced" & ReducedFactor$Age >= 60,
+    #                                90-(ReducedFactor$Age+ReducedFactor$YOS),0))
+    
+    #### Saving results into ReducedFactor 
+    
+    ### Updated* ###
+    #((2/3*12/100) Per Years untill Normal Retirement (if qualifies for Reduced)) 
+    
+    ##Adjusting code to use calculated YearsToNormRet column for early ret. penalties
+    # ReducedFactor <- ReducedFactor %>% 
+    #   mutate(RF = ifelse(RetType  == "Reduced",
+    #                             (1 - ((2/3*12/100)*(YearsNormRet))),
+    #                      ifelse(RetType  == "No",0,1))) %>%
+    #   mutate(RF = ifelse(RF <0, 0, RF)) %>%
+    #   rename(RetirementAge = Age)
+    
+    #View(ReducedFactor)
+    
+    # ReducedFactor_test <- ReducedFactor %>% pivot_wider(names_from = YOS, values_from = RF)
+    
+    #Benefits, Annuity Factor and Present Value 
+    #system.time(
+    
     BenefitsTable <- expand_grid(Age, YOS, RetirementAge) %>% 
       mutate(entry_age = Age - YOS) %>% 
       filter(entry_age %in% SalaryEntry$entry_age) %>% 
