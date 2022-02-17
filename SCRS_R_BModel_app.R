@@ -172,7 +172,7 @@ palette_reason <- list(Orange="#FF6633",
 ##########
 
 ui <- fluidPage(
-  titlePanel("SCRS NPV Pension Wealth Accrual (V1)"),
+  titlePanel("SCRS NPV Pension Wealth Accrual (V3.0)"),
   # CODE BELOW: Add select inputs on state and plan_names to choose between different pension plans in Reason database
   theme = shinythemes::shinytheme("spacelab"),
   sidebarLayout(
