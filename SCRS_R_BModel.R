@@ -85,17 +85,13 @@ SalaryEntry <- read_excel(FileName, sheet = ifelse(tier == 3, "Salary and Headco
 TerminationRateAfter10 <- read_excel(FileName, sheet = 'Termination Rates after 10')#Updated to SCRS*
 TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates before 10')#Updated to SCRS*
 
-
-
-#################################
+################################# Function
 BenefitModel <- function(employee = "Blend", tier = 3, NCost = FALSE,
-                         ARR = ARR, COLA = COLA,
+                         ARR = ARR, COLA = COLA, BenMult = BenMult,
                          DC_EE_cont = DC_EE_cont, DC_ER_cont = DC_ER_cont, DC_return = DC_return){
-#Import key data tables
+################################# 
   employee <- employee
   tier <- tier
-  
-  
 
 ## Adding YOS & Age retirement tables for Class II
 if(tier == 3){
@@ -701,6 +697,7 @@ SalaryData2 <- data.frame(BenefitModel(employee = "Blend",
                                        NCost = FALSE,
                                        ARR = ARR,
                                        COLA = COLA,
+                                       BenMult = BenMult,
                                        DC_EE_cont =  0.09, 
                                        DC_ER_cont = 0.05, 
                                        DC_return = 0.05))
