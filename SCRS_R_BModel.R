@@ -88,8 +88,14 @@ TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates befor
 
 
 #################################
-BenefitModel <- function(employee = "Blend", tier = 3, NormalCost = "FALSE"){
+BenefitModel <- function(employee = "Blend", tier = 3, NCost = FALSE,
+                         ARR = ARR, COLA = COLA,
+                         DC_EE_cont = DC_EE_cont, DC_ER_cont = DC_ER_cont, DC_return = DC_return){
 #Import key data tables
+  employee <- employee
+  tier <- tier
+  
+  
 
 ## Adding YOS & Age retirement tables for Class II
 if(tier == 3){
@@ -110,7 +116,6 @@ RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')}else{#Update
     }
     return(cumvalue)
   }
-  
   
 ### Adding scaling factors
 #scale.act.male <- 0.92 
@@ -621,10 +626,12 @@ SalaryData <- SalaryData %>%
          PVPenWealth = PenWealth/(1 + ARR)^YOS * SepProb,
          PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb)
 
-
-
 ####### DC Account Balance 
-SalaryData2 <- SalaryData %>% 
+SalaryData1.2 <- SalaryData %>% filter(entry_age ==27 & Age < 81)
+####### DC Account Balance 
+
+SalaryData2 <- SalaryData1.2 %>% 
+  #filter(entry_age == HiringAge) %>% 
   select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
   mutate(DC_EEContrib = Salary * DC_EE_cont,
          DC_ERContrib = Salary * DC_ER_cont,
@@ -633,6 +640,14 @@ SalaryData2 <- SalaryData %>%
          RealDC_balance = DC_balance/(1 + assum_infl)^YOS) %>% 
   left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
   mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
+
+
+######### Graphing SINGLE ENTRY AGE + RETENTION
+
+colnames(SalaryData2)[13] <- "PVPenWealth"
+SalaryData2 <- data.frame(SalaryData2)
+SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
+# #View(SalaryData2)
 
 #Calculate normal cost rate for each entry age
 NormalCost <- SalaryData %>% 
@@ -649,7 +664,7 @@ NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry
 ########## Normal Cost #######
 #Calculate the aggregate normal cost
 
-if(isTRUE(NormalCost)){
+if(isTRUE(NCost)){
 NC_aggregate}else{SalaryData2}
 
 #Blend: 10.86% (Class II: 11.09%)
@@ -679,10 +694,16 @@ NC_aggregate}else{SalaryData2}
 #})
 }
 
-
 ##################
 
-SalaryData2 <- data.frame(BenefitModel(employee = "Blend", tier = 3, NormalCost = "FALSE"))
+SalaryData2 <- data.frame(BenefitModel(employee = "Blend", 
+                                       tier = 3, 
+                                       NCost = FALSE,
+                                       ARR = ARR,
+                                       COLA = COLA,
+                                       DC_EE_cont =  0.09, 
+                                       DC_ER_cont = 0.05, 
+                                       DC_return = 0.05))
 ################################
 
 
@@ -713,10 +734,6 @@ SalaryData2 <- data.frame(BenefitModel(employee = "Blend", tier = 3, NormalCost 
                        Green = "#669900",LightGreen = "#00CC66", Red = "#CC0000",LightRed="#FF0000")
 
 ##############
-e.age <- unique(SalaryData2$entry_age)
-SalaryData2 <- data.frame(SalaryData2)
-SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
-# #View(SalaryData2)
 #
 EntryAge <- 27
 SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
@@ -724,7 +741,9 @@ SalaryData2 <- SalaryData2 %>% filter(Age < 81)
 SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
 y_max <- max(SalaryData2$PVPenWealth)
 
-##############
+
+############## Chart
+
 pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000, fill = "DB Accrual Pattern"))+
   geom_line(aes(group = 1,
                 text = paste0("Age: ", Age,
@@ -758,7 +777,7 @@ pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000, fill = "DB Accrual Patt
     legend.text = element_text(size = 9),
     legend.position = "bottom")
 
-
+#### Secondary axis
 
 ax2 <- list(
   overlaying = "y",
@@ -779,3 +798,4 @@ ggplotly(pwealth, tooltip = c("text")) %>%
     yaxis2 = ax2)
 
 #######################
+
