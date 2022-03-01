@@ -59,7 +59,6 @@ for(i in 1:nrow(model_inputs)){
   }
 }
 
-#Import key data tables
 SurvivalRates <- read_excel(FileName, sheet = 'Mortality Rates')
 
 #Updated* (to Pub-2010 General & teachers * Multipliers -> Actives)
@@ -86,6 +85,12 @@ SalaryEntry <- read_excel(FileName, sheet = ifelse(tier == 3, "Salary and Headco
 TerminationRateAfter10 <- read_excel(FileName, sheet = 'Termination Rates after 10')#Updated to SCRS*
 TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates before 10')#Updated to SCRS*
 
+
+
+#################################
+BenefitModel <- function(employee = "Blend", tier = 3, NormalCost = "FALSE"){
+#Import key data tables
+
 ## Adding YOS & Age retirement tables for Class II
 if(tier == 3){
 RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')}else{#Updated to SCRS*
@@ -96,7 +101,17 @@ RetirementRates <- read_excel(FileName, sheet = 'Retirement Rates')}else{#Update
 }
 #View(TerminationRateBefore10)
 
-
+  ### Automate into a package ###
+  
+  cumFV <- function(interest, cashflow){
+    cumvalue <- double(length = length(cashflow))
+    for (i in 2:length(cumvalue)) {
+      cumvalue[i] <- cumvalue[i - 1]*(1 + interest) + cashflow[i - 1]
+    }
+    return(cumvalue)
+  }
+  
+  
 ### Adding scaling factors
 #scale.act.male <- 0.92 
 #scale.ret.male <- 1.03
@@ -432,15 +447,6 @@ SeparationRates <- SeparationRates %>% select(Age, YOS, RemainingProb, SepProb)
 #View(SeparationRates)
 #Custom function to calculate cumulative future values
 
-### Automate into a package ###
-
-cumFV <- function(interest, cashflow){
-  cumvalue <- double(length = length(cashflow))
-  for (i in 2:length(cumvalue)) {
-    cumvalue[i] <- cumvalue[i - 1]*(1 + interest) + cashflow[i - 1]
-  }
-  return(cumvalue)
-}
 
 #colnames(SalaryGrowth)[2] <- "YOS"
 #Create a long-form table of Age and YOS and merge with salary data
@@ -519,8 +525,8 @@ AnnFactorData <- AnnuityF(data = MortalityTable,
 ########
 ReducedFactor <- expand_grid(Age, YOS) %>% 
   arrange(YOS) %>% 
-  mutate(#norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
-         #first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
+  mutate(norm_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90"), 1, 0),
+         first_retire = ifelse(RetirementType(Age, YOS) %in% c("Normal No Rule of 90", "Normal With Rule of 90", "Reduced"), Age, 0)
          ) %>% #remove
   group_by(YOS) %>% 
   mutate(#AgeNormRet = 120 - sum(norm_retire) + 1,     #This is the earliest age of normal retirement given the YOS
@@ -615,6 +621,19 @@ SalaryData <- SalaryData %>%
          PVPenWealth = PenWealth/(1 + ARR)^YOS * SepProb,
          PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb)
 
+
+
+####### DC Account Balance 
+SalaryData2 <- SalaryData %>% 
+  select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
+  mutate(DC_EEContrib = Salary * DC_EE_cont,
+         DC_ERContrib = Salary * DC_ER_cont,
+         DC_Contrib = DC_EEContrib + DC_ERContrib,
+         DC_balance = cumFV(DC_return, DC_Contrib),
+         RealDC_balance = DC_balance/(1 + assum_infl)^YOS) %>% 
+  left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
+  mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
+
 #Calculate normal cost rate for each entry age
 NormalCost <- SalaryData %>% 
   group_by(entry_age) %>% 
@@ -630,7 +649,8 @@ NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry
 ########## Normal Cost #######
 #Calculate the aggregate normal cost
 
-NC_aggregate 
+if(isTRUE(NormalCost)){
+NC_aggregate}else{SalaryData2}
 
 #Blend: 10.86% (Class II: 11.09%)
 #Teachers: 11.16%
@@ -657,18 +677,14 @@ NC_aggregate
 
 #### End the Timing
 #})
+}
+
+
+##################
+
+SalaryData2 <- data.frame(BenefitModel(employee = "Blend", tier = 3, NormalCost = "FALSE"))
 ################################
 
-####### DC Account Balance 
-SalaryData2 <- SalaryData %>% 
-  select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
-  mutate(DC_EEContrib = Salary * DC_EE_cont,
-         DC_ERContrib = Salary * DC_ER_cont,
-         DC_Contrib = DC_EEContrib + DC_ERContrib,
-         DC_balance = cumFV(DC_return, DC_Contrib),
-         RealDC_balance = DC_balance/(1 + assum_infl)^YOS) %>% 
-  left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
-  mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
 
 ## Graphing PWealth accrual [ALL ENTRY AGES]
 
@@ -709,35 +725,39 @@ SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
 y_max <- max(SalaryData2$PVPenWealth)
 
 ##############
-pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
+pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000, fill = "DB Accrual Pattern"))+
   geom_line(aes(group = 1,
                 text = paste0("Age: ", Age,
                               "<br>DB Pension Wealth: $",round(PVPenWealth/1000,1), " Thousands")),size = 1.25, color = palette_reason$SatBlue)+
   geom_line(aes(Age, RealDC_balance/1000,
                 group = 2,
                 text = paste0("Age: ", Age,
-                              "<br>DC Wealth: $", round(RealDC_balance/1000,1), " Thousands")), size = 1.25, color = palette_reason$Orange)+
+                              "<br>DC Wealth at ", DC_return*100,"% : $", round(RealDC_balance/1000,1), " Thousands"),fill = "DC Accrual Pattern"), size = 1, color = palette_reason$Orange)+
   geom_line(aes(Age, RemainingProb* (y_max/1000),
                 group = 3,
                 text = paste0("Age: ", Age,
-                              "<br>Members Remaining: ", round(RemainingProb*100,1), "%")), size = 1.25, color = palette_reason$LightBlue, linetype = "dashed")+
+                              "<br>Members Remaining: ", round(RemainingProb*100,1), "%"),fill = "Share or Members Remaining"), size = 1, color = palette_reason$LightBlue, linetype = "dashed")+
   scale_x_continuous(breaks = seq(0, 80, by = 10),labels = function(x) paste0(x),
-                     name = paste0("Age (Entry age at ", EntryAge, ")"), expand = c(0,0)) +
-
+                     name = paste0("Age (Entry age at 27"), expand = c(0,0)) +
+  
   scale_y_continuous(breaks = seq(0, y_max/1000, by = 100),limits = c(0, y_max/1000*1.1), labels = function(x) paste0("$",x),
                      sec.axis = ggplot2::sec_axis(~./(y_max/100), 
-                     breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",
-                     labels = function(b) paste0(round(b, 0), "%")),
+                                                  breaks = scales::pretty_breaks(n = 10), name = "Percent of Members Remaining",
+                                                  labels = function(b) paste0(round(b, 0), "%")),
                      name = "Present Value of Pension Wealth ($Thousands)", expand = c(0,0)) +
   theme_bw()+
   theme(   #panel.grid.major = element_blank(),
-    #panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(), 
+    axis.line = element_line(colour = "black"),
     plot.margin = margin(0.5, 0.5,0.5,0.5, "cm"),
     axis.text.y = element_text(size=11, color = "black"),
     axis.text.y.right = element_text(size=11, color = "black"),
     axis.text.y.left = element_text(size=11, color = "black"),
     axis.text.x = element_text(size=11, color = "black"),
-    legend.title = element_text(size = 9, colour = "black", face = "bold"))
+    legend.title = element_text(size = 9, colour = "black", face = "bold"),
+    legend.text = element_text(size = 9),
+    legend.position = "bottom")
+
 
 
 ax2 <- list(

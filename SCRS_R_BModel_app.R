@@ -179,7 +179,7 @@ ui <- fluidPage(
     sidebarPanel(width = 3,
                  img(src = base64enc::dataURI(file = "https://raw.githubusercontent.com/ReasonFoundation/databaseR/master/apps/reason_logo.png"), width = 200, height = 50),
                  selectInput("e.age", "Entry Age", choices = c(20, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67)),
-                 selectInput("ee","Employee Type", choices = c("Teachers", "General", "Blend"), selected = "Teachers"),
+                 selectInput("ee","Employee Type", choices = c("Teachers", "General", "Blend"), selected = "Blend"),
                  radioGroupButtons("tier", "Employee Class", choices = c("New","Legacy"),
                                    status = "primary"),
                  #sliderInput("interest", "Contribution Interest", min = 0.02, max = 0.08, step = 0.005, value = 0.065),
@@ -200,8 +200,8 @@ ui <- fluidPage(
       ),
       
       plotly::plotlyOutput("plot_pwealth"),
-      br(),
-      tags$div(htmlOutput("text1")),
+      #br(),
+      #tags$div(htmlOutput("text1")),
     )
   )
 )
@@ -383,7 +383,8 @@ server <- function(input, output, session){
         mutate_all(as.numeric) %>% 
         replace(is.na(.), 0)  
     } 
-    #View(SeparationRates)
+    #View(SeparationRates %>% filter(entry_age == 37))
+
     ######################
     
     #View(SeparationRates %>% select(RetirementType(SeparationRates$Age,SeparationRates$YOS)[1]))
@@ -492,7 +493,7 @@ server <- function(input, output, session){
         mutate(salary_increase = if(employee == "Blend"){salary_increase_yos_Blend}else if(employee == "Teacher"){
           salary_increase_yos_Teacher}else{salary_increase_yos_General})#Using 3 if statements for 3 EE types
       
-      
+     
       #######################################
       #################
       #################
@@ -577,6 +578,7 @@ server <- function(input, output, session){
     ReducedFactor  <- ReducedFactor %>% inner_join(x, by = "YOS")
     ReducedFactor  <- ReducedFactor %>% select(-first_retire) %>% mutate(YearsFirstRetire = first_ret-Age)
     
+
     # 
     # ReducedFactor <- expand_grid(Age, YOS)
     #   
@@ -630,7 +632,7 @@ server <- function(input, output, session){
     
     #)
     
-    #View(BenefitsTable)
+    #View(BenefitsTable  %>% select(Age, YOS, RetirementAge, entry_age,ReducedFactMult, PresentValue))
     
     #For a given combination of entry age and termination age, the member is assumed to choose the retirement age that maximizes the PV of future retirement benefits. That value is the "optimum benefit". 
     OptimumBenefit <- BenefitsTable %>% 
@@ -685,6 +687,7 @@ server <- function(input, output, session){
     # #View(SalaryData2)
     
     SalaryData2
+    
     })
     
     SalaryData2 <- data.table(account())
@@ -699,18 +702,18 @@ server <- function(input, output, session){
     #View(SalaryData2$DC_balance)
     
     ####
-    pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000))+
+    pwealth <- ggplot(SalaryData2, aes(Age,PVPenWealth/1000, fill = "DB Accrual Pattern"))+
       geom_line(aes(group = 1,
                     text = paste0("Age: ", Age,
                                   "<br>DB Pension Wealth: $",round(PVPenWealth/1000,1), " Thousands")),size = 1.25, color = palette_reason$SatBlue)+
       geom_line(aes(Age, RealDC_balance/1000,
                     group = 2,
                     text = paste0("Age: ", Age,
-                                  "<br>DC Wealth at ", DC_return*100,"% : $", round(RealDC_balance/1000,1), " Thousands")), size = 1, color = palette_reason$Orange)+
+                                  "<br>DC Wealth at ", DC_return*100,"% : $", round(RealDC_balance/1000,1), " Thousands"),fill = "DC Accrual Pattern"), size = 1, color = palette_reason$Orange)+
       geom_line(aes(Age, RemainingProb* (y_max/1000),
                     group = 3,
                     text = paste0("Age: ", Age,
-                                  "<br>Members Remaining: ", round(RemainingProb*100,1), "%")), size = 1, color = palette_reason$LightBlue, linetype = "dashed")+
+                                  "<br>Members Remaining: ", round(RemainingProb*100,1), "%"),fill = "Share or Members Remaining"), size = 1, color = palette_reason$LightBlue, linetype = "dashed")+
       scale_x_continuous(breaks = seq(0, 80, by = 10),labels = function(x) paste0(x),
                          name = paste0("Age (Entry age at ", input$e.age,")"), expand = c(0,0)) +
       
@@ -721,13 +724,19 @@ server <- function(input, output, session){
                          name = "Present Value of Pension Wealth ($Thousands)", expand = c(0,0)) +
       theme_bw()+
       theme(   #panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
         plot.margin = margin(0.5, 0.5,0.5,0.5, "cm"),
-        axis.text.y = element_text(size=11, color = "black"),
-        axis.text.y.right = element_text(size=11, color = "black"),
-        axis.text.y.left = element_text(size=11, color = "black"),
-        axis.text.x = element_text(size=11, color = "black"),
-        legend.title = element_text(size = 9, colour = "black", face = "bold"))
+        axis.text.y = element_text(size=10, color = "black"),
+        axis.text.y.right = element_text(size=10, color = "black"),
+        axis.text.y.left = element_text(size=10, color = "black"),
+        axis.text.x = element_text(size=10, color = "black"),
+        legend.title = element_text(size = 9, colour = "black", face = "bold"),
+        legend.text = element_text(size = 9)
+      )+
+      theme(legend.direction = "vertical", 
+            legend.box = "horizontal", 
+            legend.position = "none")
     
     
     ax2 <- list(
@@ -735,12 +744,14 @@ server <- function(input, output, session){
       side = "right",
       showticklabels = TRUE,
       range = c(0,110),
-      title = "Percent of Employees Remaining (%)",
-      automargin = T,
+      title = "Members Remaining (%)",
+      automargin = F,
       showgrid = FALSE,
-      titlefont = list(size = 15),
+      titlefont = list(size = 13),
       tickvals = seq(0, 110, by = 25),
-      tickfont = list(size = 15)) # I added this line
+      tickfont = list(size = 13)) # I added this line
+    
+    pwealth
     
     library(plotly)
     ggplotly(pwealth, tooltip = c("text")) %>%
