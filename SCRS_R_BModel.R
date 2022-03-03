@@ -87,7 +87,7 @@ TerminationRateBefore10 <- read_excel(FileName, sheet = 'Termination Rates befor
 
 ################################# Function
 BenefitModel <- function(employee = "Blend", tier = 3, NCost = FALSE,
-                         ARR = ARR, COLA = COLA, BenMult = BenMult,
+                         ARR = ARR, COLA = COLA, BenMult = BenMult, DC = TRUE, e.age = 27,
                          DC_EE_cont = DC_EE_cont, DC_ER_cont = DC_ER_cont, DC_return = DC_return){
 ################################# 
   employee <- employee
@@ -623,10 +623,15 @@ SalaryData <- SalaryData %>%
          PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb)
 
 ####### DC Account Balance 
-SalaryData1.2 <- SalaryData %>% filter(entry_age ==27 & Age < 81)
+#SalaryData1.2 <- SalaryData %>% filter(entry_age ==27 & Age < 81)
 ####### DC Account Balance 
 
-SalaryData2 <- SalaryData1.2 %>% 
+
+if(isTRUE(DC)){
+  
+SalaryData2 <- SalaryData %>% filter(entry_age == e.age & Age < 81)
+
+SalaryData2 <- SalaryData2 %>% 
   #filter(entry_age == HiringAge) %>% 
   select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
   mutate(DC_EEContrib = Salary * DC_EE_cont,
@@ -637,12 +642,13 @@ SalaryData2 <- SalaryData1.2 %>%
   left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
   mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
 
-
-######### Graphing SINGLE ENTRY AGE + RETENTION
-
 colnames(SalaryData2)[13] <- "PVPenWealth"
 SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
+}else{SalaryData2 <- SalaryData}
+
+######### Graphing SINGLE ENTRY AGE + RETENTION
+
 # #View(SalaryData2)
 
 #Calculate normal cost rate for each entry age
@@ -692,17 +698,19 @@ NC_aggregate}else{SalaryData2}
 
 ##################
 
-SalaryData2 <- data.frame(BenefitModel(employee = "Blend", 
-                                       tier = 3, 
-                                       NCost = FALSE,
-                                       ARR = ARR,
-                                       COLA = COLA,
-                                       BenMult = BenMult,
-                                       DC_EE_cont =  0.09, 
-                                       DC_ER_cont = 0.05, 
+SalaryData2 <- data.frame(BenefitModel(employee = "Blend", #"Teachers", "General"
+                                       tier = 3, #tier 2 for Legacy
+                                       NCost = FALSE, #(TRUE -- calculates GNC on original SalaryData)
+                                       DC = TRUE, #(TRUE -- calculates DC using e.age)
+                                       e.age = 27, #for DC
+                                       ARR = ARR, #can set manually
+                                       COLA = COLA, #can set manually
+                                       BenMult = BenMult, #can set manually
+                                       DC_EE_cont =  0.09, #can set manually
+                                       DC_ER_cont = 0.05, #can set manually
                                        DC_return = 0.05))
 ################################
-
+#View(SalaryData2)
 
 ## Graphing PWealth accrual [ALL ENTRY AGES]
 
