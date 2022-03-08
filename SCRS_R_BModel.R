@@ -632,7 +632,7 @@ SalaryData2 <- SalaryData %>% filter(entry_age == e.age & Age < 81)
 
 SalaryData2 <- SalaryData2 %>% 
   #filter(entry_age == HiringAge) %>% 
-  select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb) %>% 
+  select(Age, YOS, entry_age, start_sal, salary_increase, Salary, RemainingProb, PVPenWealth,YearsFirstRetire) %>% 
   mutate(DC_EEContrib = Salary * DC_EE_cont,
          DC_ERContrib = Salary * DC_ER_cont,
          DC_Contrib = DC_EEContrib + DC_ERContrib,
@@ -641,31 +641,32 @@ SalaryData2 <- SalaryData2 %>%
   left_join(SalaryData %>% select(Age, YOS, RealPenWealth), by = c("Age", "YOS")) %>% 
   mutate(RealHybridWealth = RealDC_balance + RealPenWealth)
 
-colnames(SalaryData2)[13] <- "PVPenWealth"
 SalaryData2 <- data.frame(SalaryData2)
 SalaryData2$entry_age <- as.numeric(SalaryData2$entry_age)
-}else{SalaryData2 <- SalaryData}
+}else{SalaryData2 <- SalaryData %>% select(entry_age,Age, YOS, PVPenWealth, RealPenWealth, YearsFirstRetire)}
 
 ######### Graphing SINGLE ENTRY AGE + RETENTION
 
 # #View(SalaryData2)
 
-#Calculate normal cost rate for each entry age
-NormalCost <- SalaryData %>% 
-  group_by(entry_age) %>% 
-  summarise(normal_cost = sum(PVPenWealth)/sum(PVCumWage)) %>% 
-  ungroup()
-
-#View(NormalCost)
-
-#Calculate the aggregate normal cost
-NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry$count_start)/
-  sum(SalaryEntry$start_sal * SalaryEntry$count_start)
 
 ########## Normal Cost #######
 #Calculate the aggregate normal cost
 
 if(isTRUE(NCost)){
+  
+  #Calculate normal cost rate for each entry age
+  NormalCost <- SalaryData %>% 
+    group_by(entry_age) %>% 
+    summarise(normal_cost = sum(PVPenWealth)/sum(PVCumWage)) %>% 
+    ungroup()
+  
+  #View(NormalCost)
+  
+  #Calculate the aggregate normal cost
+  NC_aggregate <- sum(NormalCost$normal_cost * SalaryEntry$start_sal * SalaryEntry$count_start)/
+    sum(SalaryEntry$start_sal * SalaryEntry$count_start)
+  
 NC_aggregate}else{SalaryData2}
 
 #Blend: 10.86% (Class II: 11.09%)
@@ -704,20 +705,27 @@ SalaryData2 <- data.frame(
                                        NCost = FALSE, #(TRUE -- calculates GNC on original SalaryData)
                                        DC = TRUE, #(TRUE -- calculates DC using e.age)
                                        e.age = 27, #for DC
-                                       ARR = ARR, #can set manually
-                                       COLA = COLA, #can set manually
-                                       BenMult = BenMult, #can set manually
+                                       ARR = 0.07, #can set manually
+                                       COLA = 0.01, #can set manually
+                                       BenMult = 0.0182, #can set manually
                                        DC_EE_cont =  0.09, #can set manually
                                        DC_ER_cont = 0.05, #can set manually
                                        DC_return = 0.05)
                           )
 ################################
 
-# View(SalaryData2 %>% filter(YOS == 20) %>%
-#        select(entry_age, Age, YOS, RealPenWealth)) 
+#View(SalaryData2)
+#data <- SalaryData2 %>% select(entry_age, Age, YOS, RealPenWealth)
+ 
+#Save outputs
+#write_csv(data, "SCRS_Benefits_all_Ages.csv")
 
-# View(SalaryData2 %>% filter(YearsFirstRetire == 0 | YearsFirstRetire < 0 & Age == 60) %>%
-#        select(entry_age, Age, YOS, RealPenWealth))
+#########
+  # View(SalaryData2 %>% filter(YOS == 20) %>%
+  #        select(entry_age, Age, YOS, RealPenWealth)) 
+
+# View(SalaryData2 %>%
+#         select(entry_age, Age, YOS, RealPenWealth))
 
 ## Graphing PWealth accrual [ALL ENTRY AGES]
 
@@ -750,9 +758,9 @@ SalaryData2 <- data.frame(
 EntryAge <- 27
 SalaryData2 <- SalaryData2 %>% filter(entry_age == EntryAge)
 SalaryData2 <- SalaryData2 %>% filter(Age < 81)
-SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth, na.rm = TRUE)
+SalaryData2 <- SalaryData2 %>% mutate(PVPenWealth = RealPenWealth)
+SalaryData2$PVPenWealth <- as.numeric(SalaryData2$RealPenWealth)
 y_max <- max(SalaryData2$PVPenWealth)
-
 
 ############## Chart
 
