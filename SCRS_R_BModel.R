@@ -443,7 +443,7 @@ if(tier == 3){
     ungroup()
 }
 #Filter out unecessary values
-SeparationRates <- SeparationRates %>% select(Age, YOS, RemainingProb, SepProb)
+SeparationRates <- SeparationRates %>% select(Age, YOS, RemainingProb, SepProb,YearsFirstRetire)#Adding "YearsFirstRetire" for individual benefit filtering
 
 #View(SeparationRates)
 #Custom function to calculate cumulative future values
@@ -609,7 +609,7 @@ OptimumBenefit <- BenefitsTable %>%
   mutate(MaxBenefit = ifelse(is.na(MaxBenefit), 0, MaxBenefit)) %>% 
   ungroup()
 
-####### Benefit Accrual & Normal Cost #######
+# Benefit Accrual & Normal Cost #
 #### Real Pension Wealth = Pension Wealth adjusted for inflation
 #### Actuarial PV of Pension Wealth = Pension Wealth 
 #Combine optimal benefit with employee balance and calculate the PV of future benefits and salaries 
@@ -621,7 +621,6 @@ SalaryData <- SalaryData %>%
          RealPenWealth = PenWealth/(1 + assum_infl)^YOS,
          PVPenWealth = PenWealth/(1 + ARR)^YOS * SepProb,
          PVCumWage = CumulativeWage/(1 + ARR)^YOS * SepProb)
-
 ####### DC Account Balance 
 #SalaryData1.2 <- SalaryData %>% filter(entry_age ==27 & Age < 81)
 ####### DC Account Balance 
@@ -674,7 +673,7 @@ NC_aggregate}else{SalaryData2}
 #General: 10.85%
 #Blend Class II/III: 11.09%/10.86%
 
-#######
+###
 #Class II & III payroll (5,235 & 4,253)
 #(10.86*5235 + 11.09*4253)/(5235+4253)
 
@@ -696,9 +695,11 @@ NC_aggregate}else{SalaryData2}
 #})
 }
 
-##################
+#### BenefitModel ####
 
-SalaryData2 <- data.frame(BenefitModel(employee = "Blend", #"Teachers", "General"
+
+SalaryData2 <- data.frame(
+                          BenefitModel(employee = "Blend", #"Teachers", "General"
                                        tier = 3, #tier 2 for Legacy
                                        NCost = FALSE, #(TRUE -- calculates GNC on original SalaryData)
                                        DC = TRUE, #(TRUE -- calculates DC using e.age)
@@ -708,9 +709,15 @@ SalaryData2 <- data.frame(BenefitModel(employee = "Blend", #"Teachers", "General
                                        BenMult = BenMult, #can set manually
                                        DC_EE_cont =  0.09, #can set manually
                                        DC_ER_cont = 0.05, #can set manually
-                                       DC_return = 0.05))
+                                       DC_return = 0.05)
+                          )
 ################################
-#View(SalaryData2)
+
+# View(SalaryData2 %>% filter(YOS == 20) %>%
+#        select(entry_age, Age, YOS, RealPenWealth)) 
+
+# View(SalaryData2 %>% filter(YearsFirstRetire == 0 | YearsFirstRetire < 0 & Age == 60) %>%
+#        select(entry_age, Age, YOS, RealPenWealth))
 
 ## Graphing PWealth accrual [ALL ENTRY AGES]
 
